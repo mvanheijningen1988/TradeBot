@@ -1,0 +1,17 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-python-envs",
+    "ms-python.debugpy",
+    "ms-python.black-formatter",
+    "ms-python.isort",
+    "ms-python.flake8",
+    "ms-python.vscode-pylance",
+    "ms-vscode-remote.remote-containers",
+    "ms-azuretools.vscode-docker",
+    "docker.docker",
+    "ms-vscode.vscode-chat-customizations-evaluations",
+    "sonarsource.sonarlint-vscode",
+    "mtxr.sqltools-driver-sqlite"
+  ]
+}
