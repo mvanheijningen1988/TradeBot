@@ -1,0 +1,25 @@
+<div class="login-container">
+  <div class="login-card card">
+    <div class="login-logo">
+      <span class="mono text-blue">Trade</span><span class="mono text-green">Bot</span>
+    </div>
+    <form (ngSubmit)="onLogin()">
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input class="form-input" [(ngModel)]="username" name="username"
+               placeholder="admin" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" type="password" [(ngModel)]="password"
+               name="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      @if (error) {
+        <div class="error-msg">{{ error }}</div>
+      }
+      <button type="submit" class="btn btn-primary" style="width:100%">
+        Login
+      </button>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,33 @@
+<div class="layout">
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <span class="text-blue">Trade</span><span class="text-green">Bot</span>
+    </div>
+    <div class="sidebar-nav">
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-item">
+        <span class="nav-icon">◈</span> Dashboard
+      </a>
+      <a routerLink="/workers" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">⬡</span> Workers
+        @if (pendingWorkers > 0) {
+          <span class="nav-badge">{{ pendingWorkers }}</span>
+        }
+      </a>
+      <a routerLink="/settings" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">⚙</span> Settings
+      </a>
+      <a routerLink="/diagnostics" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">◉</span> Diagnostics
+      </a>
+    </div>
+    <div class="sidebar-footer">
+      <div class="mono text-muted" style="font-size: 11px; margin-bottom: 8px">
+        {{ currentUser?.username }}
+      </div>
+      <button class="btn btn-sm" (click)="logout()">Logout</button>
+    </div>
+  </nav>
+  <main class="main-content">
+    <router-outlet />
+  </main>
+</div>

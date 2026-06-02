@@ -1,0 +1,73 @@
+// Workers component styles
+
+.btn-active {
+  border-color: var(--neon-blue);
+  box-shadow: var(--glow-blue);
+}
+
+.log-panel {
+  margin-top: 16px;
+}
+
+.log-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+
+  h2 {
+    font-size: 14px;
+    margin: 0;
+  }
+}
+
+.log-container {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.log-line {
+  padding: 4px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  display: flex;
+  gap: 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.log-level {
+  font-weight: 700;
+  min-width: 70px;
+}
+
+.log-error {
+  border-left: 2px solid var(--neon-red);
+  .log-level { color: var(--neon-red); }
+}
+
+.log-warning {
+  border-left: 2px solid var(--neon-yellow);
+  .log-level { color: var(--neon-yellow); }
+}
+
+.log-info {
+  .log-level { color: var(--neon-blue); }
+}
+
+.log-debug {
+  .log-level { color: var(--text-muted); }
+}
+
+.log-critical {
+  border-left: 2px solid var(--neon-red);
+  background: rgba(255, 51, 102, 0.05);
+  .log-level {
+    color: var(--neon-red);
+    text-shadow: 0 0 8px rgba(255, 51, 102, 0.4);
+  }
+}

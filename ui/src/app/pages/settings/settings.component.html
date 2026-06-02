@@ -1,0 +1,61 @@
+<div class="page-content">
+  <div class="page-header">
+    <h1>Settings</h1>
+  </div>
+
+  <!-- Exchange Management -->
+  <div class="card" style="margin-bottom: 24px">
+    <h2 class="mono text-blue" style="margin-bottom: 16px">Exchanges</h2>
+    <table class="table">
+      <thead>
+        <tr><th>Name</th><th>Rate Limit</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        @for (ex of exchanges; track ex.id) {
+          <tr>
+            <td>{{ ex.name }}</td>
+            <td class="mono">{{ ex.rate_limit }}/s</td>
+            <td>
+              <button class="btn btn-sm btn-danger" (click)="deleteExchange(ex)">Delete</button>
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="3" class="text-muted" style="text-align:center">No exchanges configured.</td></tr>
+        }
+      </tbody>
+    </table>
+
+    <hr style="border-color: var(--border-color); margin: 20px 0">
+    <h3 class="mono" style="margin-bottom: 12px">Add Exchange</h3>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+      <div class="form-group">
+        <label class="form-label">Name</label>
+        <input class="form-input" [(ngModel)]="newExchange.name" placeholder="bitvavo">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Rate Limit</label>
+        <input class="form-input" type="number" [(ngModel)]="newExchange.rate_limit">
+      </div>
+      <div class="form-group">
+        <label class="form-label">API Key</label>
+        <input class="form-input" [(ngModel)]="newExchange.api_key" placeholder="API key">
+      </div>
+      <div class="form-group">
+        <label class="form-label">API Secret</label>
+        <input class="form-input" type="password" [(ngModel)]="newExchange.api_secret" placeholder="API secret">
+      </div>
+    </div>
+    <button class="btn btn-primary" (click)="addExchange()">Add Exchange</button>
+  </div>
+
+  <!-- Language -->
+  <div class="card">
+    <h2 class="mono text-blue" style="margin-bottom: 16px">Language</h2>
+    <app-dropdown
+      [options]="languageOptions"
+      [(value)]="language"
+      (valueChange)="updateLanguage()"
+      style="width: 200px; display: block">
+    </app-dropdown>
+  </div>
+</div>

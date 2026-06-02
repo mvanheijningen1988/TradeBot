@@ -1,0 +1,29 @@
+.login-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: var(--bg-primary);
+}
+
+.login-card {
+  width: 380px;
+  padding: 40px;
+  border: 1px solid var(--neon-blue);
+  box-shadow: var(--glow-blue);
+}
+
+.login-logo {
+  text-align: center;
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 32px;
+  text-shadow: var(--glow-blue);
+}
+
+.error-msg {
+  color: var(--neon-red);
+  margin-bottom: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}

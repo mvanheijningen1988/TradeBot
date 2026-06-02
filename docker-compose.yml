@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  manager:
+    build:
+      context: .
+      dockerfile: Dockerfile.manager
+    ports:
+      - "8000:8000"
+    volumes:
+      - manager-data:/app/data
+      - manager-logs:/app/logs
+    environment:
+      - TRADEBOT_DB_PATH=/app/data/tradebot.db
+      - TRADEBOT_LOG_DIR=/app/logs
+      - TRADEBOT_JWT_SECRET=${JWT_SECRET:-}
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      - MANAGER_URL=http://manager:8000
+      - MANAGER_WS_URL=ws://manager:8000/ws/worker
+      - WORKER_AGENT_ID=${WORKER_ID:-worker-1}
+    depends_on:
+      - manager
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    ports:
+      - "80:80"
+    depends_on:
+      - manager
+    restart: unless-stopped
+
+volumes:
+  manager-data:
+  manager-logs:

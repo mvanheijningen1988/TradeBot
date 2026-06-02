@@ -1,0 +1,33 @@
+<div class="dropdown" [class.open]="isOpen" [class.dropdown-sm]="size === 'sm'">
+  <button class="dropdown-trigger form-input" (click)="toggle()" type="button">
+    <span class="dropdown-value" [class.text-muted]="!selectedOption">
+      {{ selectedOption?.label || placeholder }}
+    </span>
+    <span class="dropdown-arrow">▾</span>
+  </button>
+  @if (isOpen) {
+    <div class="dropdown-menu">
+      @if (searchable) {
+        <input class="dropdown-search form-input"
+               [value]="searchTerm"
+               (input)="onSearch($event)"
+               (click)="$event.stopPropagation()"
+               placeholder="Search...">
+      }
+      <div class="dropdown-items">
+        @for (opt of filteredOptions; track opt.value) {
+          <div class="dropdown-item"
+               [class.selected]="opt.value === value"
+               (click)="select(opt); $event.stopPropagation()">
+            @if (opt.icon) {
+              <img [src]="opt.icon" class="dropdown-icon" alt="">
+            }
+            {{ opt.label }}
+          </div>
+        } @empty {
+          <div class="dropdown-item text-muted">No results</div>
+        }
+      </div>
+    </div>
+  }
+</div>

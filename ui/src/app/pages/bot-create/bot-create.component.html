@@ -1,0 +1,137 @@
+<div class="page-content">
+  <div class="page-header">
+    <h1>Create Bot</h1>
+  </div>
+
+  <div class="card" style="max-width: 600px">
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input class="form-input" [(ngModel)]="form.name" placeholder="My Grid Bot">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Exchange</label>
+      <app-dropdown
+        [options]="exchangeOptions"
+        [(value)]="form.exchange_id"
+        (valueChange)="onExchangeChange()"
+        placeholder="Select exchange...">
+      </app-dropdown>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Market</label>
+      <app-dropdown
+        [options]="marketOptions"
+        [(value)]="form.market"
+        placeholder="Select market..."
+        [searchable]="true">
+      </app-dropdown>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Strategy</label>
+      <app-dropdown
+        [options]="strategyOptions"
+        [(value)]="form.strategy"
+        placeholder="Select strategy...">
+      </app-dropdown>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Budget (quote currency)</label>
+      <input class="form-input" type="number" [(ngModel)]="form.budget_quote" min="0" step="0.01">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Profit Mode</label>
+      <app-dropdown
+        [options]="profitModeOptions"
+        [(value)]="form.profit_mode"
+        placeholder="Select profit mode...">
+      </app-dropdown>
+    </div>
+
+    @if (form.profit_mode === 'skim') {
+      <div class="form-group">
+        <label class="form-label">Skim Percentage (%)</label>
+        <input class="form-input" type="number" [(ngModel)]="form.profit_skim_pct" min="0" max="100" step="1">
+      </div>
+    }
+
+    <hr style="border-color: var(--border-color); margin: 20px 0">
+    <h3 class="mono text-blue" style="margin-bottom: 16px">Strategy Parameters</h3>
+
+    @if (form.strategy === 'grid_trading') {
+      <div class="form-group">
+        <label class="form-label">Upper Price</label>
+        <input class="form-input" type="number" [(ngModel)]="params.upper_price" step="0.01">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Lower Price</label>
+        <input class="form-input" type="number" [(ngModel)]="params.lower_price" step="0.01">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Number of Grids</label>
+        <input class="form-input" type="number" [(ngModel)]="params.num_grids" min="2">
+      </div>
+    }
+
+    @if (form.strategy === 'dca') {
+      <div class="form-group">
+        <label class="form-label">Amount per Order</label>
+        <input class="form-input" type="number" [(ngModel)]="params.amount_per_order" step="0.01">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Interval</label>
+        <app-dropdown
+          [options]="intervalOptions"
+          [(value)]="params.interval"
+          placeholder="Select interval...">
+        </app-dropdown>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Max Orders (0 = unlimited)</label>
+        <input class="form-input" type="number" [(ngModel)]="params.max_orders" min="0">
+      </div>
+    }
+
+    @if (form.strategy === 'martingale') {
+      <div class="form-group">
+        <label class="form-label">Initial Amount (quote)</label>
+        <input class="form-input" type="number" [(ngModel)]="params.initial_amount_quote" step="0.01">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Buy-in Trigger (%)</label>
+        <input class="form-input" type="number" [(ngModel)]="params.buy_in_trigger_pct" step="0.1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Take Profit (%)</label>
+        <input class="form-input" type="number" [(ngModel)]="params.take_profit_pct" step="0.1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Position Multiplier</label>
+        <input class="form-input" type="number" [(ngModel)]="params.position_multiplier" step="0.1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Max Buy-ins</label>
+        <input class="form-input" type="number" [(ngModel)]="params.max_buy_ins" min="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Stop Loss (%, 0 = disabled)</label>
+        <input class="form-input" type="number" [(ngModel)]="params.stop_loss_pct" min="0" step="0.5">
+      </div>
+    }
+
+    @if (error) {
+      <div style="color: var(--neon-red); margin-bottom: 12px; font-family: var(--font-mono); font-size: 12px">
+        {{ error }}
+      </div>
+    }
+
+    <div style="display: flex; gap: 12px; margin-top: 20px">
+      <button class="btn btn-primary" (click)="onCreate()">Create Bot</button>
+      <button class="btn" routerLink="/">Cancel</button>
+    </div>
+  </div>
+</div>

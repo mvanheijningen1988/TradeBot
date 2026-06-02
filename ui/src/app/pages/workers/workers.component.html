@@ -1,0 +1,93 @@
+<div class="page-content">
+  <div class="page-header">
+    <h1>Workers</h1>
+  </div>
+
+  <div class="card">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Agent ID</th>
+          <th>Address</th>
+          <th>Status</th>
+          <th>Version</th>
+          <th>Last Heartbeat</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (w of workers; track w.id) {
+          <tr>
+            <td class="mono">{{ w.agent_id }}</td>
+            <td class="mono">{{ w.address }}</td>
+            <td>
+              <span class="badge" [class]="'badge-' + w.status">
+                {{ w.status }}
+              </span>
+            </td>
+            <td class="mono">{{ w.version }}</td>
+            <td class="mono text-muted">{{ w.last_heartbeat || '—' }}</td>
+            <td>
+              @if (w.status === 'pending') {
+                <button class="btn btn-sm btn-success" (click)="approve(w)">Approve</button>
+                <button class="btn btn-sm btn-danger" (click)="reject(w)">Reject</button>
+              }
+              <button class="btn btn-sm"
+                      [class.btn-active]="logWorkerId === w.id"
+                      (click)="toggleLogs(w)">Logs</button>
+              <button class="btn btn-sm" (click)="remove(w)">Remove</button>
+            </td>
+          </tr>
+          @if (expandedWorker === w.id) {
+            <tr>
+              <td colspan="6" style="padding: 0">
+                <div style="padding: 12px 24px; background: var(--bg-secondary)">
+                  <strong class="text-blue mono">Bots on this worker:</strong>
+                  @if (workerBots.length === 0) {
+                    <p class="text-muted" style="margin-top: 8px">No bots assigned.</p>
+                  }
+                  @for (bot of workerBots; track bot.id) {
+                    <div style="margin-top: 6px" class="mono">
+                      {{ bot.name }} — {{ bot.market }}
+                      <span class="badge" [class]="'badge-' + bot.status">{{ bot.status }}</span>
+                    </div>
+                  }
+                </div>
+              </td>
+            </tr>
+          }
+        } @empty {
+          <tr>
+            <td colspan="6" class="text-muted" style="text-align:center">
+              No workers registered.
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  @if (logWorkerId !== null) {
+    <div class="card log-panel">
+      <div class="log-panel-header">
+        <h2 class="mono text-blue">Logs — {{ logWorkerName }}</h2>
+        <button class="btn btn-sm" (click)="closeLogs()">✕ Close</button>
+      </div>
+      <div class="log-container" #logContainer>
+        @for (log of workerLogs; track log.id; let i = $index) {
+          <div class="log-line" [class]="'log-' + log.level.toLowerCase()">
+            <span class="text-muted">{{ log.timestamp }}</span>
+            <span class="log-level">[{{ log.level }}]</span>
+            <span class="text-blue">{{ log.category }}</span>
+            @if (log.correlation_id) {
+              <span class="text-purple">[{{ log.correlation_id }}]</span>
+            }
+            {{ log.message }}
+          </div>
+        } @empty {
+          <div class="text-muted" style="padding: 12px">No log entries for this worker.</div>
+        }
+      </div>
+    </div>
+  }
+</div>
