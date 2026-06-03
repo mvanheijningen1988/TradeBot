@@ -79,11 +79,43 @@
   <!-- Log Level Control -->
   <div class="card">
     <h2 class="mono text-blue" style="margin-bottom: 16px">Log Level Control</h2>
+
+    <!-- Active rules -->
+    @if (logLevelRules.length) {
+      <table class="table" style="margin-bottom: 16px">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Level</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (rule of logLevelRules; track rule.category) {
+            <tr>
+              <td class="mono">{{ rule.category }}</td>
+              <td>
+                <span class="badge" [class]="'badge-level-' + rule.level.toLowerCase()">{{ rule.level }}</span>
+              </td>
+              <td>
+                @if (rule.category !== '*') {
+                  <button class="btn btn-sm btn-danger" (click)="removeLogLevel(rule.category)">Remove</button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    } @else {
+      <div class="text-muted mono" style="margin-bottom: 16px; font-size: 12px">No log level rules configured.</div>
+    }
+
+    <!-- Add rule -->
     <div style="display: flex; gap: 12px; align-items: flex-end">
       <div class="form-group" style="margin-bottom: 0">
         <label class="form-label">Category</label>
         <input class="form-input" style="width: 200px"
-               [(ngModel)]="levelCategory" placeholder="e.g. manager.services">
+               [(ngModel)]="levelCategory" placeholder="* (all)">
       </div>
       <div class="form-group" style="margin-bottom: 0">
         <label class="form-label">Level</label>

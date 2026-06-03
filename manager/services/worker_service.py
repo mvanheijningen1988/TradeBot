@@ -20,6 +20,7 @@ from manager.constants import (
     WS_TYPE_WORKER_STATUS,
 )
 from manager.database.repositories import BotRepository, WorkerRepository
+from manager.services.log_service import LogService
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +36,12 @@ class WorkerService:
         config: Config,
         worker_repo: WorkerRepository,
         bot_repo: BotRepository,
+        log_service: Optional["LogService"] = None,
     ) -> None:
         self._config = config
         self._worker_repo = worker_repo
         self._bot_repo = bot_repo
+        self._log_service = log_service
         # Connected workers: agent_id -> websocket
         self._connections: dict[str, object] = {}
         self._health_task: Optional[asyncio.Task] = None
@@ -62,6 +65,31 @@ class WorkerService:
                 data.get("type", "unknown"),
             )
 
+    async def _persist_log(
+        self,
+        category: str,
+        message: str,
+        level: str = "INFO",
+        subcategory: str = "",
+        worker_id: Optional[int] = None,
+        bot_id: Optional[int] = None,
+        correlation_id: Optional[str] = None,
+    ) -> None:
+        """Persist a log entry if log service is available and level passes."""
+        if not self._log_service:
+            return
+        if not self._log_service.should_log(category, level):
+            return
+        await self._log_service.persist(
+            category=category,
+            message=message,
+            level=level,
+            subcategory=subcategory,
+            worker_id=worker_id,
+            bot_id=bot_id,
+            correlation_id=correlation_id,
+        )
+
     async def register(
         self, agent_id: str, address: str, version: str
     ) -> dict:
@@ -74,15 +102,16 @@ class WorkerService:
                     "Contact administrator."
                 )
             await self._worker_repo.update_heartbeat(existing["id"])
+            await self._persist_log(
+                "worker", f"Worker {agent_id} re-registered from {address}",
+                worker_id=existing["id"], subcategory="registration",
+            )
             if existing["status"] == WORKER_STATUS_PENDING:
-                # Re-broadcast for pending workers so UI picks it up
-                # even if the original broadcast was missed.
                 await self._notify_ui({
                     "type": WS_TYPE_WORKER_REGISTERED,
                     "worker": existing,
                 })
             else:
-                # Notify UI that an existing worker came back online.
                 await self._notify_ui({
                     "type": WS_TYPE_WORKER_STATUS,
                     "worker_id": existing["id"],
@@ -100,6 +129,11 @@ class WorkerService:
             agent_id,
             address,
         )
+        await self._persist_log(
+            "worker",
+            f"Worker {agent_id} registered from {address} v{version} (pending approval)",
+            worker_id=worker_id, subcategory="registration",
+        )
         # Notify UI about new worker pending approval.
         await self._notify_ui({
             "type": WS_TYPE_WORKER_REGISTERED,
@@ -111,6 +145,10 @@ class WorkerService:
         """Approve a pending worker."""
         await self._worker_repo.approve(worker_id)
         logger.info("Worker %d approved.", worker_id)
+        await self._persist_log(
+            "worker", f"Worker {worker_id} approved",
+            worker_id=worker_id, subcategory="lifecycle",
+        )
         worker = await self._worker_repo.get_by_id(worker_id)
         await self._notify_ui({
             "type": WS_TYPE_WORKER_STATUS,
@@ -123,6 +161,10 @@ class WorkerService:
         """Reject a pending worker."""
         await self._worker_repo.reject(worker_id)
         logger.info("Worker %d rejected.", worker_id)
+        await self._persist_log(
+            "worker", f"Worker {worker_id} rejected",
+            level="WARNING", worker_id=worker_id, subcategory="lifecycle",
+        )
         await self._notify_ui({
             "type": WS_TYPE_WORKER_STATUS,
             "worker_id": worker_id,
@@ -137,6 +179,11 @@ class WorkerService:
             if worker["status"] != WORKER_STATUS_ONLINE:
                 await self._worker_repo.update_status(
                     worker["id"], WORKER_STATUS_ONLINE
+                )
+                await self._persist_log(
+                    "worker",
+                    f"Worker {agent_id} is now online",
+                    worker_id=worker["id"], subcategory="lifecycle",
                 )
 
     def register_connection(self, agent_id: str, ws: object) -> None:
@@ -178,6 +225,10 @@ class WorkerService:
         for bot in bots:
             await self._bot_repo.update(bot["id"], worker_id=None)
             await self._bot_repo.update_status(bot["id"], "stopped")
+        await self._persist_log(
+            "worker", f"Worker {worker_id} removed, {len(bots)} bot(s) stopped",
+            level="WARNING", worker_id=worker_id, subcategory="lifecycle",
+        )
         await self._worker_repo.delete(worker_id)
         logger.info("Worker %d removed, bots stopped.", worker_id)
 

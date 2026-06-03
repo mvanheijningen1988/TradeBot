@@ -85,6 +85,10 @@ class WorkerApp:
             self.agent_id,
             self.manager_url,
         )
+        await self._client.send_worker_log(
+            f"Worker {self.agent_id} started (v{self.version})",
+            subcategory="lifecycle",
+        )
 
         # Run heartbeat and message receiver concurrently.
         await asyncio.gather(
@@ -162,6 +166,10 @@ class WorkerApp:
         self._runners[bot_id] = runner
         asyncio.create_task(runner.run())
         logger.info("Bot %d started.", bot_id)
+        await self._client.send_worker_log(
+            f"Bot {bot_id} started on worker",
+            subcategory="bot-lifecycle",
+        )
 
     async def _stop_bot(self, bot_id: int) -> None:
         """Stop a running bot."""
@@ -169,6 +177,10 @@ class WorkerApp:
         if runner:
             await runner.stop()
             logger.info("Bot %d stopped.", bot_id)
+            await self._client.send_worker_log(
+                f"Bot {bot_id} stopped on worker",
+                subcategory="bot-lifecycle",
+            )
 
 
 def main() -> None:

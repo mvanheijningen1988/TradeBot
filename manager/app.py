@@ -75,7 +75,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     budget_service = BudgetService(bot_repo, budget_repo)
     app.state.budget_service = budget_service
 
-    worker_service = WorkerService(config, worker_repo, bot_repo)
+    worker_service = WorkerService(config, worker_repo, bot_repo, log_service)
     worker_service.set_broadcast_callback(ws_manager.broadcast_ui)
     await worker_service.start_health_monitor()
     app.state.worker_service = worker_service

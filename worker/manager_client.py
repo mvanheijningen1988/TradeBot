@@ -15,6 +15,7 @@ from manager.constants import (
     WS_TYPE_BOT_STATUS,
     WS_TYPE_ERROR,
     WS_TYPE_HEARTBEAT,
+    WS_TYPE_WORKER_LOG,
 )
 
 logger = logging.getLogger(__name__)
@@ -149,6 +150,24 @@ class ManagerClient:
         """Report an error for a bot."""
         await self._send(
             {"type": WS_TYPE_ERROR, "bot_id": bot_id, "message": message}
+        )
+
+    async def send_worker_log(
+        self,
+        message: str,
+        level: str = "INFO",
+        subcategory: str = "",
+        correlation_id: Optional[str] = None,
+    ) -> None:
+        """Send a worker-level log entry to the Manager."""
+        await self._send(
+            {
+                "type": WS_TYPE_WORKER_LOG,
+                "message": message,
+                "level": level,
+                "subcategory": subcategory,
+                "correlation_id": correlation_id,
+            }
         )
 
     async def _send(self, data: dict) -> None:

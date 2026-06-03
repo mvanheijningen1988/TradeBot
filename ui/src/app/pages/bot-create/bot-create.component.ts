@@ -21,6 +21,7 @@ export class BotCreateComponent implements OnInit {
   exchanges: Exchange[] = [];
   markets: MarketInfo[] = [];
   error = '';
+  private coinIcons: Record<string, { img_url?: string }> = {};
 
   exchangeOptions: DropdownOption[] = [];
   marketOptions: DropdownOption[] = [];
@@ -73,9 +74,24 @@ export class BotCreateComponent implements OnInit {
         .getMarkets(exId)
         .subscribe((m) => {
           this.markets = m;
-          this.marketOptions = m.map((mk) => ({ value: mk.market, label: mk.market }));
+          if (Object.keys(this.coinIcons).length > 0) {
+            this.buildMarketOptions();
+          } else {
+            this.exchangeService.getIcons().subscribe((icons) => {
+              this.coinIcons = icons as Record<string, { img_url?: string }>;
+              this.buildMarketOptions();
+            });
+          }
         });
     }
+  }
+
+  private buildMarketOptions(): void {
+    this.marketOptions = this.markets.map((mk) => {
+      const base = mk.base.toUpperCase();
+      const icon = this.coinIcons[base]?.img_url;
+      return { value: mk.market, label: mk.market, ...(icon ? { icon } : {}) };
+    });
   }
 
   onCreate(): void {

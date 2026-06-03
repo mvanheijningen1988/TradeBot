@@ -23,7 +23,7 @@ class LogService:
     ) -> None:
         self._config = config
         self._repo = log_repo
-        self._level_overrides: dict[str, str] = {}
+        self._level_overrides: dict[str, str] = {"*": "INFO"}
 
     def setup_logging(self) -> None:
         """Configure root logger with console + rotating file handlers."""
@@ -54,7 +54,7 @@ class LogService:
 
     def set_level(self, category: str, level: str) -> None:
         """Change log level for a category without restart."""
-        log = logging.getLogger(category)
+        log = logging.getLogger(category if category != "*" else "")
         log.setLevel(level.upper())
         self._level_overrides[category] = level.upper()
         logger.info(
@@ -64,6 +64,26 @@ class LogService:
     def get_levels(self) -> dict[str, str]:
         """Return current level overrides."""
         return dict(self._level_overrides)
+
+    def remove_level(self, category: str) -> bool:
+        """Remove a log level override. Returns False if not found or is *."""
+        if category == "*" or category not in self._level_overrides:
+            return False
+        del self._level_overrides[category]
+        logging.getLogger(category).setLevel(logging.NOTSET)
+        logger.info("Log level override for '%s' removed.", category)
+        return True
+
+    def should_log(self, category: str, level: str) -> bool:
+        """Check whether a message should be persisted based on overrides."""
+        levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        threshold = self._level_overrides.get(
+            category, self._level_overrides.get("*", "INFO")
+        ).upper()
+        try:
+            return levels.index(level.upper()) >= levels.index(threshold)
+        except ValueError:
+            return True
 
     async def persist(
         self,

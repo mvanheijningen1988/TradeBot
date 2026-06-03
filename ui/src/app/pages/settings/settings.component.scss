@@ -1,1 +1,10 @@
-// Settings - uses global form/card/table/btn styles
+// Settings component styles
+
+.edit-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 120px auto;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  align-items: end;
+}

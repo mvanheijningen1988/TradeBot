@@ -15,6 +15,7 @@ from manager.constants import (
     WS_TYPE_START_BOT,
     WS_TYPE_STATUS,
     WS_TYPE_STOP_BOT,
+    WS_TYPE_WORKER_LOG,
 )
 
 logger = logging.getLogger(__name__)
@@ -134,6 +135,15 @@ async def ws_worker(websocket: WebSocket):
     await manager.connect_worker(websocket, agent_id)
     worker_svc.register_connection(agent_id, websocket)
     logger.info("Worker connected: %s", agent_id)
+    log_svc = websocket.app.state.log_service
+    if log_svc.should_log("worker", "INFO"):
+        await log_svc.persist(
+            category="worker",
+            message=f"Worker {agent_id} WebSocket connected",
+            level="INFO",
+            subcategory="connection",
+            worker_id=worker["id"],
+        )
 
     try:
         while True:
@@ -151,6 +161,14 @@ async def ws_worker(websocket: WebSocket):
         manager.disconnect_worker(agent_id)
         worker_svc.unregister_connection(agent_id)
         logger.info("Worker disconnected: %s", agent_id)
+        if log_svc.should_log("worker", "WARNING"):
+            await log_svc.persist(
+                category="worker",
+                message=f"Worker {agent_id} WebSocket disconnected",
+                level="WARNING",
+                subcategory="connection",
+                worker_id=worker["id"],
+            )
 
 
 async def _handle_worker_message(
@@ -171,24 +189,66 @@ async def _handle_worker_message(
             await manager.broadcast_ui(
                 {"type": WS_TYPE_STATUS, "bot_id": bot_id, "status": status}
             )
+            worker = await app.state.worker_service._worker_repo.get_by_agent_id(
+                agent_id
+            )
+            wid = worker["id"] if worker else None
+            if log_svc.should_log("bot", "INFO"):
+                await log_svc.persist(
+                    category="bot",
+                    message=f"Bot {bot_id} status changed to {status}",
+                    level="INFO",
+                    subcategory="status",
+                    bot_id=bot_id,
+                    worker_id=wid,
+                )
 
     elif msg_type == WS_TYPE_BOT_LOG:
         worker = await app.state.worker_service._worker_repo.get_by_agent_id(
             agent_id
         )
         wid = worker["id"] if worker else None
-        await log_svc.persist(
-            category="bot",
-            message=msg.get("message", ""),
-            level=msg.get("level", "INFO"),
-            subcategory=msg.get("subcategory", ""),
-            correlation_id=msg.get("correlation_id"),
-            bot_id=msg.get("bot_id"),
-            worker_id=wid,
-        )
+        msg_level = msg.get("level", "INFO")
+        if log_svc.should_log("bot", msg_level):
+            await log_svc.persist(
+                category="bot",
+                message=msg.get("message", ""),
+                level=msg_level,
+                subcategory=msg.get("subcategory", ""),
+                correlation_id=msg.get("correlation_id"),
+                bot_id=msg.get("bot_id"),
+                worker_id=wid,
+            )
         # Forward to UI with worker_id included.
         msg["worker_id"] = wid
         await manager.broadcast_ui(msg)
+
+    elif msg_type == WS_TYPE_WORKER_LOG:
+        worker = await app.state.worker_service._worker_repo.get_by_agent_id(
+            agent_id
+        )
+        wid = worker["id"] if worker else None
+        msg_level = msg.get("level", "INFO")
+        if log_svc.should_log("worker", msg_level):
+            await log_svc.persist(
+                category="worker",
+                message=msg.get("message", ""),
+                level=msg_level,
+                subcategory=msg.get("subcategory", ""),
+                correlation_id=msg.get("correlation_id"),
+                worker_id=wid,
+            )
+        # Forward to UI for live streaming.
+        fwd = {
+            "type": WS_TYPE_BOT_LOG,
+            "category": "worker",
+            "subcategory": msg.get("subcategory", ""),
+            "level": msg_level,
+            "message": msg.get("message", ""),
+            "worker_id": wid,
+            "correlation_id": msg.get("correlation_id"),
+        }
+        await manager.broadcast_ui(fwd)
 
     elif msg_type == WS_TYPE_ERROR:
         bot_id = msg.get("bot_id")

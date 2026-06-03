@@ -23,8 +23,9 @@ export class DiagnosticsComponent implements OnInit {
   filterCategory = '';
   filterCorrelationId = '';
   filterLevel: string | number = '';
-  levelCategory = '';
-  levelValue: string | number = 'DEBUG';
+  levelCategory = '*';
+  levelValue: string | number = 'INFO';
+  logLevelRules: { category: string; level: string }[] = [];
 
   logLevelFilterOptions: DropdownOption[] = [
     { value: '', label: 'All levels' },
@@ -45,6 +46,7 @@ export class DiagnosticsComponent implements OnInit {
   ngOnInit(): void {
     this.diagService.getStats().subscribe((s) => (this.stats = s));
     this.searchLogs();
+    this.loadLogLevels();
   }
 
   searchLogs(): void {
@@ -55,9 +57,30 @@ export class DiagnosticsComponent implements OnInit {
     this.diagService.getLogs(params).subscribe((l) => (this.logs = l));
   }
 
+  loadLogLevels(): void {
+    this.diagService.getLogLevels().subscribe((levels) => {
+      this.logLevelRules = Object.entries(levels).map(([category, level]) => ({
+        category,
+        level,
+      }));
+    });
+  }
+
   setLogLevel(): void {
     if (this.levelCategory) {
-      this.diagService.setLogLevel(this.levelCategory, this.levelValue as string).subscribe();
+      this.diagService
+        .setLogLevel(this.levelCategory, this.levelValue as string)
+        .subscribe(() => {
+          this.loadLogLevels();
+          this.levelCategory = '';
+          this.levelValue = 'INFO';
+        });
     }
+  }
+
+  removeLogLevel(category: string): void {
+    this.diagService.removeLogLevel(category).subscribe(() => {
+      this.loadLogLevels();
+    });
   }
 }

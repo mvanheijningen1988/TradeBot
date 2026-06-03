@@ -27,6 +27,12 @@
   }
 }
 
+.dropdown-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .dropdown-arrow {
   font-size: 10px;
   transition: transform 0.2s;

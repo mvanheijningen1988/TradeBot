@@ -41,6 +41,10 @@ export class DiagnosticsService {
     return this.http.post<void>(`${this.url}/log-level`, { category, level });
   }
 
+  removeLogLevel(category: string): Observable<void> {
+    return this.http.delete<void>(`${this.url}/log-level/${encodeURIComponent(category)}`);
+  }
+
   getLogLevels(): Observable<Record<string, string>> {
     return this.http.get<Record<string, string>>(`${this.url}/log-levels`);
   }

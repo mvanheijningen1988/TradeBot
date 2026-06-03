@@ -28,6 +28,9 @@ export class SettingsComponent implements OnInit {
 
   newExchange = { name: 'bitvavo', api_key: '', api_secret: '', rate_limit: 1000 };
 
+  editingId: number | null = null;
+  editForm = { api_key: '', api_secret: '', rate_limit: 1000 };
+
   ngOnInit(): void {
     this.loadExchanges();
     this.auth.currentUser$.subscribe((u) => {
@@ -43,6 +46,30 @@ export class SettingsComponent implements OnInit {
     this.exchangeService.create(this.newExchange).subscribe(() => {
       this.loadExchanges();
       this.newExchange = { name: 'bitvavo', api_key: '', api_secret: '', rate_limit: 1000 };
+    });
+  }
+
+  startEdit(ex: Exchange): void {
+    this.editingId = ex.id;
+    this.editForm = { api_key: '', api_secret: '', rate_limit: ex.rate_limit };
+  }
+
+  cancelEdit(): void {
+    this.editingId = null;
+  }
+
+  saveEdit(ex: Exchange): void {
+    const updates: { api_key?: string; api_secret?: string; rate_limit?: number } = {};
+    if (this.editForm.api_key) updates.api_key = this.editForm.api_key;
+    if (this.editForm.api_secret) updates.api_secret = this.editForm.api_secret;
+    if (this.editForm.rate_limit !== ex.rate_limit) updates.rate_limit = this.editForm.rate_limit;
+    if (Object.keys(updates).length === 0) {
+      this.editingId = null;
+      return;
+    }
+    this.exchangeService.update(ex.id, updates).subscribe(() => {
+      this.editingId = null;
+      this.loadExchanges();
     });
   }
 

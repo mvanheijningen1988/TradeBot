@@ -20,6 +20,12 @@ class CreateExchangeRequest(BaseModel):
     rate_limit: int = 1000
 
 
+class UpdateExchangeRequest(BaseModel):
+    api_key: Optional[str] = None
+    api_secret: Optional[str] = None
+    rate_limit: Optional[int] = None
+
+
 @router.get("")
 async def list_exchanges(
     request: Request,
@@ -54,6 +60,25 @@ async def delete_exchange(
     """Remove an exchange configuration."""
     await request.app.state.exchange_repo.delete(exchange_id)
     return {"detail": "Exchange removed."}
+
+
+@router.put("/{exchange_id}")
+async def update_exchange(
+    exchange_id: int,
+    body: UpdateExchangeRequest,
+    request: Request,
+    _user: Annotated[dict, Depends(require_admin)],
+):
+    """Update an exchange configuration."""
+    repo = request.app.state.exchange_repo
+    exchange = await repo.get_by_id(exchange_id)
+    if not exchange:
+        raise HTTPException(status_code=404, detail="Exchange not found.")
+    updates = body.model_dump(exclude_none=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update.")
+    await repo.update(exchange_id, **updates)
+    return {"detail": "Exchange updated."}
 
 
 @router.get("/{exchange_id}/markets")

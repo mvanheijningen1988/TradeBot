@@ -35,6 +35,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   openOrders: Record<string, unknown>[] = [];
   orderHistory: Record<string, unknown>[] = [];
   tradeHistory: Record<string, unknown>[] = [];
+  activeOrderTab: 'open' | 'history' | 'trades' = 'open';
 
   // Budget trend
   budgetData: BudgetPoint[] = [];

@@ -51,6 +51,13 @@ export class ExchangeService {
     return this.http.delete<void>(`${this.url}/${id}`);
   }
 
+  update(
+    id: number,
+    data: { api_key?: string; api_secret?: string; rate_limit?: number }
+  ): Observable<{ detail: string }> {
+    return this.http.put<{ detail: string }>(`${this.url}/${id}`, data);
+  }
+
   getMarkets(exchangeId: number): Observable<MarketInfo[]> {
     return this.http.get<MarketInfo[]>(`${this.url}/${exchangeId}/markets`);
   }

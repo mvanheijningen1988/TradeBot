@@ -84,6 +84,20 @@ async def set_log_level(
     return {"detail": f"Log level for '{body.category}' set to '{body.level}'."}
 
 
+@router.delete("/log-level/{category}")
+async def remove_log_level(
+    category: str,
+    request: Request,
+    _user: Annotated[dict, Depends(require_admin)],
+):
+    """Remove a log level override for a category."""
+    removed = request.app.state.log_service.remove_level(category)
+    if not removed:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"No override for '{category}' or cannot remove.")
+    return {"detail": f"Log level override for '{category}' removed."}
+
+
 @router.get("/log-levels")
 async def get_log_levels(
     request: Request,

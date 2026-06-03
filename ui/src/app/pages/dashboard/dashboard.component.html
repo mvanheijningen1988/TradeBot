@@ -129,124 +129,132 @@
     </div>
   </div>
 
-  <!-- Open Orders -->
-  <div class="card" style="margin-bottom: 24px">
-    <h2 class="mono text-blue" style="margin-bottom: 16px">Open Orders</h2>
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Bot</th>
-          <th>Market</th>
-          <th>Side</th>
-          <th>Type</th>
-          <th>Amount</th>
-          <th>Price</th>
-          <th>Status</th>
-          <th>Created</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (order of openOrders; track order['id']) {
-          <tr>
-            <td>{{ getBotName(order['bot_id']) }}</td>
-            <td class="mono">{{ order['market'] }}</td>
-            <td>
-              <span [class]="order['side'] === 'buy' ? 'text-green' : 'text-red'">
-                {{ order['side'] }}
-              </span>
-            </td>
-            <td class="mono">{{ order['order_type'] }}</td>
-            <td class="mono">{{ order['amount'] }}</td>
-            <td class="mono">{{ order['price'] }}</td>
-            <td><span class="badge badge-running">{{ order['status'] }}</span></td>
-            <td class="mono text-muted">{{ order['created_at'] }}</td>
-          </tr>
-        } @empty {
-          <tr>
-            <td colspan="8" class="text-muted" style="text-align:center">No open orders.</td>
-          </tr>
-        }
-      </tbody>
-    </table>
-  </div>
-
-  <!-- Order History -->
-  <div class="card" style="margin-bottom: 24px">
-    <h2 class="mono text-blue" style="margin-bottom: 16px">Order History</h2>
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Bot</th>
-          <th>Market</th>
-          <th>Side</th>
-          <th>Type</th>
-          <th>Amount</th>
-          <th>Price</th>
-          <th>Status</th>
-          <th>Created</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (order of orderHistory; track order['id']) {
-          <tr>
-            <td>{{ getBotName(order['bot_id']) }}</td>
-            <td class="mono">{{ order['market'] }}</td>
-            <td>
-              <span [class]="order['side'] === 'buy' ? 'text-green' : 'text-red'">
-                {{ order['side'] }}
-              </span>
-            </td>
-            <td class="mono">{{ order['order_type'] }}</td>
-            <td class="mono">{{ order['amount'] }}</td>
-            <td class="mono">{{ order['price'] }}</td>
-            <td><span class="badge" [class]="'badge-' + (order['status'] === 'filled' ? 'running' : 'stopped')">{{ order['status'] }}</span></td>
-            <td class="mono text-muted">{{ order['created_at'] }}</td>
-          </tr>
-        } @empty {
-          <tr>
-            <td colspan="8" class="text-muted" style="text-align:center">No order history.</td>
-          </tr>
-        }
-      </tbody>
-    </table>
-  </div>
-
-  <!-- Trade History -->
+  <!-- Orders & Trades -->
   <div class="card">
-    <h2 class="mono text-blue" style="margin-bottom: 16px">Trade History</h2>
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Bot</th>
-          <th>Market</th>
-          <th>Side</th>
-          <th>Amount</th>
-          <th>Price</th>
-          <th>Fee</th>
-          <th>Time</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (trade of tradeHistory; track trade['id']) {
-          <tr>
-            <td>{{ getBotName(trade['bot_id']) }}</td>
-            <td class="mono">{{ trade['market'] }}</td>
-            <td>
-              <span [class]="trade['side'] === 'buy' ? 'text-green' : 'text-red'">
-                {{ trade['side'] }}
-              </span>
-            </td>
-            <td class="mono">{{ trade['amount'] }}</td>
-            <td class="mono">{{ trade['price'] }}</td>
-            <td class="mono text-muted">{{ trade['fee'] }}</td>
-            <td class="mono text-muted">{{ trade['created_at'] }}</td>
-          </tr>
-        } @empty {
-          <tr>
-            <td colspan="7" class="text-muted" style="text-align:center">No trade history.</td>
-          </tr>
+    <div class="tab-bar">
+      <button class="tab-btn" [class.tab-active]="activeOrderTab === 'open'" (click)="activeOrderTab = 'open'">
+        Open Orders
+        @if (openOrders.length) {
+          <span class="tab-count">{{ openOrders.length }}</span>
         }
-      </tbody>
-    </table>
+      </button>
+      <button class="tab-btn" [class.tab-active]="activeOrderTab === 'history'" (click)="activeOrderTab = 'history'">Order History</button>
+      <button class="tab-btn" [class.tab-active]="activeOrderTab === 'trades'" (click)="activeOrderTab = 'trades'">Trade History</button>
+    </div>
+
+    @if (activeOrderTab === 'open') {
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Bot</th>
+            <th>Market</th>
+            <th>Side</th>
+            <th>Type</th>
+            <th>Amount</th>
+            <th>Price</th>
+            <th>Status</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (order of openOrders; track order['id']) {
+            <tr>
+              <td>{{ getBotName(order['bot_id']) }}</td>
+              <td class="mono">{{ order['market'] }}</td>
+              <td>
+                <span [class]="order['side'] === 'buy' ? 'text-green' : 'text-red'">
+                  {{ order['side'] }}
+                </span>
+              </td>
+              <td class="mono">{{ order['order_type'] }}</td>
+              <td class="mono">{{ order['amount'] }}</td>
+              <td class="mono">{{ order['price'] }}</td>
+              <td><span class="badge badge-running">{{ order['status'] }}</span></td>
+              <td class="mono text-muted">{{ order['created_at'] }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="8" class="text-muted" style="text-align:center">No open orders.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    @if (activeOrderTab === 'history') {
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Bot</th>
+            <th>Market</th>
+            <th>Side</th>
+            <th>Type</th>
+            <th>Amount</th>
+            <th>Price</th>
+            <th>Status</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (order of orderHistory; track order['id']) {
+            <tr>
+              <td>{{ getBotName(order['bot_id']) }}</td>
+              <td class="mono">{{ order['market'] }}</td>
+              <td>
+                <span [class]="order['side'] === 'buy' ? 'text-green' : 'text-red'">
+                  {{ order['side'] }}
+                </span>
+              </td>
+              <td class="mono">{{ order['order_type'] }}</td>
+              <td class="mono">{{ order['amount'] }}</td>
+              <td class="mono">{{ order['price'] }}</td>
+              <td><span class="badge" [class]="'badge-' + (order['status'] === 'filled' ? 'running' : 'stopped')">{{ order['status'] }}</span></td>
+              <td class="mono text-muted">{{ order['created_at'] }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="8" class="text-muted" style="text-align:center">No order history.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    @if (activeOrderTab === 'trades') {
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Bot</th>
+            <th>Market</th>
+            <th>Side</th>
+            <th>Amount</th>
+            <th>Price</th>
+            <th>Fee</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (trade of tradeHistory; track trade['id']) {
+            <tr>
+              <td>{{ getBotName(trade['bot_id']) }}</td>
+              <td class="mono">{{ trade['market'] }}</td>
+              <td>
+                <span [class]="trade['side'] === 'buy' ? 'text-green' : 'text-red'">
+                  {{ trade['side'] }}
+                </span>
+              </td>
+              <td class="mono">{{ trade['amount'] }}</td>
+              <td class="mono">{{ trade['price'] }}</td>
+              <td class="mono text-muted">{{ trade['fee'] }}</td>
+              <td class="mono text-muted">{{ trade['created_at'] }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="7" class="text-muted" style="text-align:center">No trade history.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
   </div>
 </div>
