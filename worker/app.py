@@ -21,6 +21,7 @@ from manager.constants import (
     WS_TYPE_BOT_STATUS,
     WS_TYPE_ERROR,
     WS_TYPE_HEARTBEAT,
+    WS_TYPE_SET_LOG_LEVEL,
     WS_TYPE_START_BOT,
     WS_TYPE_STOP_BOT,
 )
@@ -156,6 +157,16 @@ class WorkerApp:
             bot_config = msg.get("config", {})
             await self._start_bot(bot_id, bot_config)
 
+        elif msg_type == WS_TYPE_SET_LOG_LEVEL:
+            category = msg.get("category", "*")
+            level = msg.get("level", "INFO")
+            log_name = category if category != "*" else ""
+            logging.getLogger(log_name).setLevel(level.upper())
+            logger.info(
+                "Log level for '%s' set to %s (from manager)",
+                category, level.upper(),
+            )
+
     async def _start_bot(self, bot_id: int, config: dict) -> None:
         """Start a bot runner for the given bot."""
         if bot_id in self._runners:
@@ -164,7 +175,15 @@ class WorkerApp:
 
         runner = BotRunner(bot_id, config, self._client)
         self._runners[bot_id] = runner
-        asyncio.create_task(runner.run())
+
+        async def _run_and_cleanup() -> None:
+            try:
+                await runner.run()
+            finally:
+                self._runners.pop(bot_id, None)
+                logger.debug("Bot %d runner removed from registry.", bot_id)
+
+        asyncio.create_task(_run_and_cleanup())
         logger.info("Bot %d started.", bot_id)
         await self._client.send_worker_log(
             f"Bot {bot_id} started on worker",

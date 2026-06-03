@@ -59,3 +59,17 @@ async def get_signals_by_coin(
     """Return recent signals for a specific coin."""
     engine = _get_engine(request)
     return engine.store.get_by_coin(coin.upper(), limit=limit)
+
+
+@router.get("/status")
+async def get_engine_status(
+    request: Request,
+    _user: Annotated[dict, Depends(get_current_user)],
+):
+    """Return news engine status including active sentiment model."""
+    engine = _get_engine(request)
+    return {
+        "running": engine.is_running,
+        "finbert_enabled": engine.sentiment_model_name != "vader",
+        "sentiment_model": engine.sentiment_model_name,
+    }

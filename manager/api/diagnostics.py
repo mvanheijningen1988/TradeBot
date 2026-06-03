@@ -11,6 +11,8 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from manager.api.deps import get_current_user, require_admin
+from manager.api.ws import manager as ws_manager
+from manager.constants import WS_TYPE_SET_LOG_LEVEL
 
 router = APIRouter(prefix="/diagnostics", tags=["diagnostics"])
 
@@ -81,6 +83,12 @@ async def set_log_level(
 ):
     """Change log level for a category without restart."""
     request.app.state.log_service.set_level(body.category, body.level)
+    # Propagate to all connected workers immediately.
+    await ws_manager.broadcast_workers({
+        "type": WS_TYPE_SET_LOG_LEVEL,
+        "category": body.category,
+        "level": body.level.upper(),
+    })
     return {"detail": f"Log level for '{body.category}' set to '{body.level}'."}
 
 
@@ -94,7 +102,15 @@ async def remove_log_level(
     removed = request.app.state.log_service.remove_level(category)
     if not removed:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail=f"No override for '{category}' or cannot remove.")
+        raise HTTPException(
+            status_code=404, 
+            detail=f"No override for '{category}' or cannot remove.")
+    # Propagate reset to all connected workers.
+    await ws_manager.broadcast_workers({
+        "type": WS_TYPE_SET_LOG_LEVEL,
+        "category": category,
+        "level": "NOTSET",
+    })
     return {"detail": f"Log level override for '{category}' removed."}
 
 

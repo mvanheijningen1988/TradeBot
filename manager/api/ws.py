@@ -12,6 +12,7 @@ from manager.constants import (
     WS_TYPE_BOT_STATUS,
     WS_TYPE_ERROR,
     WS_TYPE_HEARTBEAT,
+    WS_TYPE_ORDER_UPDATE,
     WS_TYPE_START_BOT,
     WS_TYPE_STATUS,
     WS_TYPE_STOP_BOT,
@@ -79,6 +80,17 @@ class ConnectionManager:
             self.disconnect_worker(agent_id)
             return False
 
+    async def broadcast_workers(self, data: dict) -> None:
+        """Send a message to all connected workers."""
+        dead: list[str] = []
+        for agent_id, ws in self._worker_clients.items():
+            try:
+                await ws.send_json(data)
+            except Exception:
+                dead.append(agent_id)
+        for d in dead:
+            self.disconnect_worker(d)
+
 
 # Global instance – attached to app.state in app.py.
 manager = ConnectionManager()
@@ -135,6 +147,23 @@ async def ws_worker(websocket: WebSocket):
     await manager.connect_worker(websocket, agent_id)
     worker_svc.register_connection(agent_id, websocket)
     logger.info("Worker connected: %s", agent_id)
+
+    # Restore bots that were previously started before restart/failover.
+    try:
+        bot_svc = websocket.app.state.bot_service
+        restored_assigned = await bot_svc.restore_bots_for_worker(worker["id"])
+        restored_unassigned = await bot_svc.restore_unassigned_bots()
+        if restored_assigned or restored_unassigned:
+            logger.info(
+                "Recovered %d assigned and %d unassigned bot(s) on "
+                "worker connect %s.",
+                restored_assigned,
+                restored_unassigned,
+                agent_id,
+            )
+    except Exception:
+        logger.exception("Failed bot recovery for worker %s.", agent_id)
+
     log_svc = websocket.app.state.log_service
     if log_svc.should_log("worker", "INFO"):
         await log_svc.persist(
@@ -252,8 +281,58 @@ async def _handle_worker_message(
 
     elif msg_type == WS_TYPE_ERROR:
         bot_id = msg.get("bot_id")
+        error_msg = msg.get("message", "Unknown error")
         if bot_id:
             await bot_svc.report_fault(bot_id)
         logger.error(
-            "Worker %s error: %s", agent_id, msg.get("message")
+            "Worker %s error: %s", agent_id, error_msg
         )
+        worker = await app.state.worker_service._worker_repo.get_by_agent_id(
+            agent_id
+        )
+        wid = worker["id"] if worker else None
+        if log_svc.should_log("bot", "ERROR"):
+            await log_svc.persist(
+                category="bot",
+                message=error_msg,
+                level="ERROR",
+                subcategory="fault",
+                bot_id=bot_id,
+                worker_id=wid,
+            )
+
+    elif msg_type == WS_TYPE_ORDER_UPDATE:
+        bot_id = msg.get("bot_id")
+        if bot_id:
+            bot = await bot_svc.get_bot(bot_id)
+            if not bot:
+                logger.warning(
+                    "Ignoring order_update for unknown bot_id=%s",
+                    bot_id,
+                )
+                return
+            order_id = await app.state.order_repo.create(
+                bot_id=bot_id,
+                exchange_order_id=msg.get("exchange_order_id", ""),
+                market=msg.get("market", ""),
+                side=msg.get("side", ""),
+                order_type=msg.get("order_type", ""),
+                status=msg.get("status", "new"),
+                amount=msg.get("amount"),
+                price=msg.get("price"),
+            )
+            await manager.broadcast_ui({
+                "type": WS_TYPE_ORDER_UPDATE,
+                "bot_id": bot_id,
+                "order": {
+                    "id": order_id,
+                    "bot_id": bot_id,
+                    "exchange_order_id": msg.get("exchange_order_id", ""),
+                    "market": msg.get("market", ""),
+                    "side": msg.get("side", ""),
+                    "order_type": msg.get("order_type", ""),
+                    "status": msg.get("status", "new"),
+                    "amount": msg.get("amount", ""),
+                    "price": msg.get("price", ""),
+                },
+            })

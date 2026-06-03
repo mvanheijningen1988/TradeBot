@@ -66,7 +66,7 @@
         @if (investSignals.length > 0) {
           <div class="signal-list">
             @for (sig of investSignals; track sig.coin) {
-              <div class="signal-row">
+              <div class="signal-row signal-row--clickable" (click)="navigateToCreateBot(sig.coin)">
                 <div
                   class="signal-coin mono signal-coin--hoverable"
                   (mouseenter)="showTooltip($event, sig, true)"
@@ -75,8 +75,13 @@
                 <div class="signal-details">
                   <span class="badge badge-bullish">{{ sig.signal }}</span>
                   <span class="signal-score mono text-green">{{ sig.score | number:'1.2-2' }}</span>
+                  <span class="signal-confidence mono text-muted">{{ (sig.confidence * 100) | number:'1.0-0' }}%</span>
                 </div>
-                <div class="signal-reason text-muted">{{ sig.reason }}</div>
+                <div class="signal-reason">
+                  @for (r of formatReasons(sig.reason); track r) {
+                    <span class="reason-tag reason-tag--buy">{{ r }}</span>
+                  }
+                </div>
               </div>
             }
           </div>
@@ -93,7 +98,7 @@
         @if (removeSignals.length > 0) {
           <div class="signal-list">
             @for (sig of removeSignals; track sig.coin) {
-              <div class="signal-row">
+              <div class="signal-row signal-row--clickable" (click)="navigateToCreateBot(sig.coin)">
                 <div
                   class="signal-coin mono signal-coin--hoverable"
                   (mouseenter)="showTooltip($event, sig, false)"
@@ -102,8 +107,13 @@
                 <div class="signal-details">
                   <span class="badge badge-bearish">{{ sig.signal }}</span>
                   <span class="signal-score mono text-red">{{ sig.score | number:'1.2-2' }}</span>
+                  <span class="signal-confidence mono text-muted">{{ (sig.confidence * 100) | number:'1.0-0' }}%</span>
                 </div>
-                <div class="signal-reason text-muted">{{ sig.reason }}</div>
+                <div class="signal-reason">
+                  @for (r of formatReasons(sig.reason); track r) {
+                    <span class="reason-tag reason-tag--sell">{{ r }}</span>
+                  }
+                </div>
               </div>
             }
           </div>

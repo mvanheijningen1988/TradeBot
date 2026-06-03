@@ -198,6 +198,37 @@ class WorkerService:
         """Get the WebSocket connection for a worker."""
         return self._connections.get(agent_id)
 
+    async def send_command(
+        self, worker_id: int, message: dict
+    ) -> bool:
+        """Send a command to a worker via its WebSocket connection."""
+        worker = await self._worker_repo.get_by_id(worker_id)
+        if not worker:
+            logger.error("Cannot send command: worker %d not found.", worker_id)
+            return False
+        agent_id = worker["agent_id"]
+        ws = self._connections.get(agent_id)
+        if not ws:
+            logger.error(
+                "Cannot send command: worker %d (%s) not connected.",
+                worker_id, agent_id,
+            )
+            return False
+        try:
+            await ws.send_json(message)
+            logger.info(
+                "Sent %s to worker %d (%s).",
+                message.get("type", "unknown"), worker_id, agent_id,
+            )
+            return True
+        except Exception:
+            logger.exception(
+                "Failed to send command to worker %d (%s).",
+                worker_id, agent_id,
+            )
+            self._connections.pop(agent_id, None)
+            return False
+
     async def select_worker(self) -> Optional[dict]:
         """Select the least-loaded approved worker for bot assignment."""
         workers = await self._worker_repo.get_approved_online()

@@ -29,6 +29,13 @@ export interface Balance {
   in_order: string;
 }
 
+export interface BudgetAvailable {
+  quote: string;
+  exchange_total: number;
+  allocated: number;
+  free: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ExchangeService {
   private http = inject(HttpClient);
@@ -68,6 +75,12 @@ export class ExchangeService {
 
   getBalances(exchangeId: number): Observable<Balance[]> {
     return this.http.get<Balance[]>(`${this.url}/${exchangeId}/balances`);
+  }
+
+  getBudgetAvailable(exchangeId: number, quote: string): Observable<BudgetAvailable> {
+    return this.http.get<BudgetAvailable>(`${this.url}/${exchangeId}/budget-available`, {
+      params: { quote },
+    });
   }
 
   getIcons(): Observable<Record<string, unknown>> {

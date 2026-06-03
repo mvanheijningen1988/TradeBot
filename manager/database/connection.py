@@ -24,14 +24,12 @@ class Database:
 
     async def connect(self) -> None:
         """Open the database and ensure schema exists."""
-        is_new = not Path(self._db_path).exists()
         self._db = await aiosqlite.connect(self._db_path)
         self._db.row_factory = aiosqlite.Row
         await self._db.execute("PRAGMA journal_mode=WAL")
         await self._db.execute("PRAGMA foreign_keys=ON")
 
-        if is_new:
-            await self._create_schema()
+        await self._create_schema()
         logger.info("Database connected: %s", self._db_path)
 
     async def close(self) -> None:

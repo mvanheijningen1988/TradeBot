@@ -1,6 +1,6 @@
 """Bot management API endpoints."""
 
-from typing import Annotated, Any, Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -139,6 +139,16 @@ async def get_bot_orders(
     return await request.app.state.bot_service.get_orders(bot_id, limit)
 
 
+@router.get("/{bot_id}/open-orders")
+async def get_bot_open_orders(
+    bot_id: int,
+    request: Request,
+    _user: Annotated[dict, Depends(get_current_user)],
+):
+    """Return live open orders from the exchange for a bot."""
+    return await request.app.state.bot_service.get_open_orders(bot_id)
+
+
 @router.get("/{bot_id}/trades")
 async def get_bot_trades(
     bot_id: int,
@@ -150,6 +160,16 @@ async def get_bot_trades(
     return await request.app.state.bot_service.get_trades(bot_id, limit)
 
 
+@router.get("/overview/budget-history")
+async def get_overall_budget_history(
+    request: Request,
+    _user: Annotated[dict, Depends(get_current_user)],
+    limit: int = 500,
+):
+    """Return budget trend data aggregated across all bots."""
+    return await request.app.state.budget_service.get_all_history(limit)
+
+
 @router.get("/{bot_id}/budget-history")
 async def get_budget_history(
     bot_id: int,
@@ -159,13 +179,3 @@ async def get_budget_history(
 ):
     """Return budget trend data for a bot."""
     return await request.app.state.budget_service.get_history(bot_id, limit)
-
-
-@router.get("/overview/budget-history")
-async def get_overall_budget_history(
-    request: Request,
-    _user: Annotated[dict, Depends(get_current_user)],
-    limit: int = 500,
-):
-    """Return budget trend data aggregated across all bots."""
-    return await request.app.state.budget_service.get_all_history(limit)

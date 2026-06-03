@@ -8,9 +8,15 @@ with the market only through an ExchangeClient instance.
 import abc
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Callable, Coroutine, Optional
 
 from manager.exchanges.base import ExchangeClient
+
+# Async callback: (message, level, correlation_id) -> None
+LogCallback = Callable[[str, str, Optional[str]], Coroutine[Any, Any, None]]
+
+# Async callback: (order_data_dict) -> None
+OrderCallback = Callable[[dict[str, Any]], Coroutine[Any, Any, None]]
 
 
 class StrategyState(str, Enum):
@@ -50,6 +56,49 @@ class Strategy(abc.ABC):
         self._config = config
         self._exchange = exchange
         self._state = StrategyState.IDLE
+        self._log_callback: Optional[LogCallback] = None
+        self._order_callback: Optional[OrderCallback] = None
+        self._correlation_id: Optional[str] = None
+
+    def set_log_callback(
+        self, callback: LogCallback, correlation_id: Optional[str] = None
+    ) -> None:
+        """Set a callback for sending log messages to the manager."""
+        self._log_callback = callback
+        self._correlation_id = correlation_id
+
+    def set_order_callback(self, callback: OrderCallback) -> None:
+        """Set a callback for reporting order events to the manager."""
+        self._order_callback = callback
+
+    async def _log(
+        self, message: str, level: str = "INFO"
+    ) -> None:
+        """Log via callback (to manager/UI) and local logger."""
+        if self._log_callback:
+            await self._log_callback(message, level, self._correlation_id)
+
+    async def _report_order(
+        self,
+        exchange_order_id: str,
+        market: str,
+        side: str,
+        order_type: str,
+        status: str,
+        amount: str = "",
+        price: str = "",
+    ) -> None:
+        """Report an order event via callback."""
+        if self._order_callback:
+            await self._order_callback({
+                "exchange_order_id": exchange_order_id,
+                "market": market,
+                "side": side,
+                "order_type": order_type,
+                "status": status,
+                "amount": amount,
+                "price": price,
+            })
 
     @property
     def state(self) -> StrategyState:

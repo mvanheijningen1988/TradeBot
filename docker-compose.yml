@@ -5,6 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.manager
+      args:
+        ENABLE_FINBERT: ${ENABLE_FINBERT:-0}
     ports:
       - "8000:8000"
     volumes:
@@ -14,6 +16,7 @@ services:
       - TRADEBOT_DB_PATH=/app/data/tradebot.db
       - TRADEBOT_LOG_DIR=/app/logs
       - TRADEBOT_JWT_SECRET=${JWT_SECRET:-}
+      - NEWS_ENGINE_USE_FINBERT=${ENABLE_FINBERT:-0}
     restart: unless-stopped
 
   worker:

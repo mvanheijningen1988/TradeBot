@@ -2,8 +2,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+ARG ENABLE_FINBERT=0
+
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir . && \
+    if [ "$ENABLE_FINBERT" = "1" ]; then \
+        pip install --no-cache-dir ".[finbert]"; \
+    fi
 
 COPY shared/ ./shared/
 COPY manager/ ./manager/

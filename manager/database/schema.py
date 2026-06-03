@@ -130,4 +130,41 @@ TABLES: list[str] = [
         created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
     )
     """,
+
+    # ── Virtual wallets (per exchange) ───────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS wallets (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        exchange_id     INTEGER NOT NULL REFERENCES exchanges(id) UNIQUE,
+        quote_currency  TEXT    NOT NULL DEFAULT 'EUR',
+        balance         REAL    NOT NULL DEFAULT 0,
+        created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+        updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
+
+    # ── Wallet transaction log ───────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS wallet_transactions (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        wallet_id       INTEGER NOT NULL REFERENCES wallets(id),
+        tx_type         TEXT    NOT NULL,
+        amount          REAL    NOT NULL,
+        bot_id          INTEGER REFERENCES bots(id),
+        description     TEXT    NOT NULL DEFAULT '',
+        created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
+
+    # ── Wallet balance history (for budget trend) ────────────────
+    """
+    CREATE TABLE IF NOT EXISTS wallet_balance_history (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        wallet_id       INTEGER NOT NULL REFERENCES wallets(id),
+        balance         REAL    NOT NULL,
+        allocated       REAL    NOT NULL DEFAULT 0,
+        unallocated     REAL    NOT NULL DEFAULT 0,
+        timestamp       TEXT    NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
 ]

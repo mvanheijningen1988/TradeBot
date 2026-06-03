@@ -48,6 +48,8 @@ WS_TYPE_ERROR = "error"
 WS_TYPE_WORKER_REGISTERED = "worker_registered"
 WS_TYPE_WORKER_STATUS = "worker_status"
 WS_TYPE_ALERT = "alert"
+WS_TYPE_ORDER_UPDATE = "order_update"
+WS_TYPE_SET_LOG_LEVEL = "set_log_level"
 
 # ── Supported languages ─────────────────────────────────────────
 LANG_EN = "en"

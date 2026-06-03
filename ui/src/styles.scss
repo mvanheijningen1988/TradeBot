@@ -72,6 +72,7 @@ html, body {
   &.btn-primary { background: var(--neon-blue); color: #000; border-color: var(--neon-blue); }
   &.btn-success { background: var(--neon-green); color: #000; border-color: var(--neon-green); }
   &.btn-danger { background: var(--neon-red); color: #fff; border-color: var(--neon-red); }
+  &.btn-info { background: transparent; color: var(--neon-blue); border-color: var(--border-color); &:hover { border-color: var(--neon-blue); } }
   &.btn-sm { padding: 4px 10px; font-size: 12px; }
   &:disabled { opacity: 0.4; cursor: not-allowed; }
 }
@@ -440,6 +441,16 @@ html, body {
   font-size: 12px;
 }
 
+.signal-row--clickable {
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+
+  &:hover {
+    border-color: var(--neon-blue);
+    background: rgba(0, 170, 255, 0.04);
+  }
+}
+
 .signal-coin {
   font-size: 16px;
   font-weight: 700;
@@ -472,12 +483,37 @@ html, body {
 }
 
 .signal-confidence {
-  font-size: 11px;
+  font-size: 10px;
+  opacity: 0.7;
 }
 
 .signal-reason {
   font-size: 11px;
   grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.reason-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: capitalize;
+}
+
+.reason-tag--buy {
+  background: rgba(0, 255, 136, 0.1);
+  color: var(--neon-green);
+  border: 1px solid rgba(0, 255, 136, 0.2);
+}
+
+.reason-tag--sell {
+  background: rgba(255, 51, 102, 0.1);
+  color: var(--neon-red);
+  border: 1px solid rgba(255, 51, 102, 0.2);
 }
 
 .signal-meta {

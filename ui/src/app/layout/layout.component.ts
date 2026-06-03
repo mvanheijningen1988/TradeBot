@@ -1,6 +1,6 @@
 import { Component, inject, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterModule } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { AuthService, User } from '../services/auth.service';
 import { SignalsService, SignalRecommendation } from '../services/signals.service';
@@ -22,6 +22,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly workerService = inject(WorkerService);
   private readonly toastService = inject(ToastService);
   private readonly signalsService = inject(SignalsService);
+  private readonly router = inject(Router);
   private wsSub?: Subscription;
 
   currentUser: User | null = null;
@@ -148,5 +149,16 @@ export class LayoutComponent implements OnInit, OnDestroy {
       this.hoveredSignal = null;
       this.tooltipHideTimer = null;
     }, 150);
+  }
+
+  formatReasons(reason: string): string[] {
+    return (reason || 'sentiment_only')
+      .split(',')
+      .map(r => r.trim().replaceAll('_', ' '))
+      .filter(r => r.length > 0);
+  }
+
+  navigateToCreateBot(coin: string): void {
+    this.router.navigate(['/bots/new'], { queryParams: { coin } });
   }
 }

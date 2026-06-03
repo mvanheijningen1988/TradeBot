@@ -155,6 +155,53 @@ async def get_balances(
     return result
 
 
+@router.get("/{exchange_id}/budget-available")
+async def get_budget_available(
+    exchange_id: int,
+    quote: str,
+    request: Request,
+    _user: Annotated[dict, Depends(get_current_user)],
+):
+    """Return budget availability for a quote currency on an exchange.
+
+    Returns exchange balance, total allocated to bots, and the
+    remaining free amount.  When a wallet exists, wallet limits
+    are returned as well.
+    """
+    client = await _get_exchange_client(request, exchange_id)
+    balances = await client.get_balance(symbol=quote.upper())
+    await client.disconnect()
+
+    exchange_available = float(balances[0].available) if balances else 0.0
+    exchange_in_order = float(balances[0].in_order) if balances else 0.0
+    total_on_exchange = exchange_available + exchange_in_order
+
+    budget_service = request.app.state.budget_service
+    allocated = float(await budget_service.get_total_allocated(exchange_id))
+    free = max(0.0, total_on_exchange - allocated)
+
+    result = {
+        "quote": quote.upper(),
+        "exchange_total": round(total_on_exchange, 2),
+        "allocated": round(allocated, 2),
+        "free": round(free, 2),
+    }
+
+    # Enrich with wallet info when available.
+    wallet_service = request.app.state.wallet_service
+    wallet_info = await wallet_service.get_wallet_info(exchange_id)
+    if wallet_info and wallet_info["balance"] > 0:
+        result["wallet"] = {
+            "balance": wallet_info["balance"],
+            "allocated": wallet_info["allocated"],
+            "unallocated": wallet_info["unallocated"],
+        }
+        # When wallet is active, free = wallet unallocated
+        result["free"] = wallet_info["unallocated"]
+
+    return result
+
+
 @router.get("/icons")
 async def get_coin_icons(request: Request):
     """Return coin icon mappings (public endpoint)."""

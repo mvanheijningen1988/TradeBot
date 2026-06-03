@@ -52,6 +52,18 @@ class NewsEngineService:
         """Access the signal store for querying."""
         return self._store
 
+    @property
+    def is_running(self) -> bool:
+        """Return True when the pipeline loop is active."""
+        return self._running
+
+    @property
+    def sentiment_model_name(self) -> str:
+        """Return the active sentiment model name."""
+        if self._sentiment.has_finbert:
+            return "ensemble"
+        return "vader"
+
     async def start(self) -> None:
         """Start the background pipeline loop."""
         if self._running:

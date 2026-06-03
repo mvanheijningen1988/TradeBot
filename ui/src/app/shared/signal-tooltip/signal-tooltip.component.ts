@@ -1,11 +1,11 @@
 import { Component, Input } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, TitleCasePipe } from '@angular/common';
 import { SignalRecommendation } from '../../services/signals.service';
 
 @Component({
   selector: 'app-signal-tooltip',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TitleCasePipe],
   template: `
     <div
       class="signal-tooltip"
@@ -33,9 +33,9 @@ import { SignalRecommendation } from '../../services/signals.service';
         <span class="signal-tooltip__label">Confidence</span>
         <span class="signal-tooltip__value mono">{{ (signal.confidence * 100).toFixed(0) }}%</span>
       </div>
-      <div class="signal-tooltip__row">
-        <span class="signal-tooltip__label">Reason</span>
-        <span class="signal-tooltip__value">{{ signal.reason }}</span>
+      <div class="signal-tooltip__row signal-tooltip__row--wrap">
+        <span class="signal-tooltip__label">{{ reasons.length > 1 ? 'Reasons' : 'Reason' }}</span>
+        <span class="signal-tooltip__value signal-tooltip__value--wrap">{{ reasons.join(' · ') | titlecase }}</span>
       </div>
       <div class="signal-tooltip__row">
         <span class="signal-tooltip__label">Source</span>
@@ -149,6 +149,16 @@ import { SignalRecommendation } from '../../services/signals.service';
       white-space: nowrap;
     }
 
+    .signal-tooltip__row--wrap {
+      align-items: flex-start;
+    }
+
+    .signal-tooltip__value--wrap {
+      white-space: normal;
+      word-wrap: break-word;
+      line-height: 1.4;
+    }
+
     .signal-tooltip__link {
       font-family: var(--font-mono);
       font-size: 11px;
@@ -193,6 +203,13 @@ import { SignalRecommendation } from '../../services/signals.service';
 export class SignalTooltipComponent {
   @Input() signal!: SignalRecommendation;
   @Input() isBuy = true;
+
+  get reasons(): string[] {
+    return (this.signal?.reason || 'sentiment_only')
+      .split(',')
+      .map(r => r.trim().replaceAll('_', ' '))
+      .filter(r => r.length > 0);
+  }
 
   private readonly eventDescriptions: Record<string, { buy: string; sell: string }> = {
     institutional_adoption: {

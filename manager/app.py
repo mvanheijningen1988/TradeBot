@@ -24,6 +24,7 @@ from manager.database.repositories import (
     OrderHistoryRepository,
     TradeHistoryRepository,
     UserRepository,
+    WalletRepository,
     WorkerRepository,
 )
 from manager.services.auth_service import AuthService
@@ -32,6 +33,7 @@ from manager.services.budget_service import BudgetService
 from manager.services.cache_service import CacheService
 from manager.services.coin_icons import CoinIconService
 from manager.services.log_service import LogService
+from manager.services.wallet_service import WalletService
 from manager.services.worker_service import WorkerService
 
 logger = logging.getLogger(__name__)
@@ -62,9 +64,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     trade_repo = TradeHistoryRepository(db)
     budget_repo = BudgetHistoryRepository(db)
     log_repo = LogEntryRepository(db)
+    wallet_repo = WalletRepository(db)
 
     app.state.user_repo = user_repo
     app.state.exchange_repo = exchange_repo
+    app.state.order_repo = order_repo
 
     # Services.
     log_service = LogService(config, log_repo)
@@ -81,13 +85,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     budget_service = BudgetService(bot_repo, budget_repo)
     app.state.budget_service = budget_service
 
+    wallet_service = WalletService(wallet_repo)
+    app.state.wallet_service = wallet_service
+
+    budget_service.set_wallet_service(wallet_service)
+
     worker_service = WorkerService(config, worker_repo, bot_repo, log_service)
     worker_service.set_broadcast_callback(ws_manager.broadcast_ui)
     await worker_service.start_health_monitor()
     app.state.worker_service = worker_service
 
     bot_service = BotService(
-        bot_repo, order_repo, trade_repo, worker_service
+        bot_repo, order_repo, trade_repo, worker_service, exchange_repo
     )
     app.state.bot_service = bot_service
 
@@ -101,6 +110,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await news_engine.start()
         app.state.news_engine = news_engine
 
+    # Wallet exchange verification.
+    async def _make_exchange_client(eid: int):
+        from manager.exchanges.bitvavo.client import BitvavoClient
+
+        ex = await exchange_repo.get_by_id(eid)
+        if not ex:
+            raise ValueError(f"Exchange {eid} not found")
+        client = BitvavoClient(
+            api_key=ex["api_key"], api_secret=ex["api_secret"]
+        )
+        await client.connect()
+        await client.authenticate()
+        return client
+
+    wallet_service.set_exchange_client_factory(_make_exchange_client)
+    await wallet_service.start_verification_loop(exchange_repo)
+
     logger.info(
         "TradeBot Manager started on %s:%d", config.host, config.port
     )
@@ -108,6 +134,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     # Shutdown.
+    if hasattr(app.state, "wallet_service"):
+        await app.state.wallet_service.stop_verification_loop()
     if hasattr(app.state, "news_engine"):
         await app.state.news_engine.stop()
     if hasattr(app.state, "worker_service"):

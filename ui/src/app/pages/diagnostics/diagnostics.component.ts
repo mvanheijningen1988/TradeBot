@@ -1,6 +1,7 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import {
   DiagnosticsService,
   LogEntry,
@@ -17,12 +18,14 @@ import { DropdownComponent, DropdownOption } from '../../shared/dropdown/dropdow
 })
 export class DiagnosticsComponent implements OnInit {
   private diagService = inject(DiagnosticsService);
+  private route = inject(ActivatedRoute);
 
   stats: SystemStats | null = null;
   logs: LogEntry[] = [];
   filterCategory = '';
   filterCorrelationId = '';
   filterLevel: string | number = '';
+  filterBotId: number | null = null;
   levelCategory = '*';
   levelValue: string | number = 'INFO';
   logLevelRules: { category: string; level: string }[] = [];
@@ -45,6 +48,10 @@ export class DiagnosticsComponent implements OnInit {
 
   ngOnInit(): void {
     this.diagService.getStats().subscribe((s) => (this.stats = s));
+    const botId = this.route.snapshot.queryParamMap.get('bot_id');
+    if (botId) {
+      this.filterBotId = parseInt(botId, 10);
+    }
     this.searchLogs();
     this.loadLogLevels();
   }
@@ -54,6 +61,7 @@ export class DiagnosticsComponent implements OnInit {
     if (this.filterCategory) params['category'] = this.filterCategory;
     if (this.filterCorrelationId) params['correlation_id'] = this.filterCorrelationId;
     if (this.filterLevel) params['level'] = this.filterLevel;
+    if (this.filterBotId) params['bot_id'] = this.filterBotId;
     this.diagService.getLogs(params).subscribe((l) => (this.logs = l));
   }
 

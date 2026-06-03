@@ -38,6 +38,7 @@ class BotRunner:
     async def run(self) -> None:
         """Main bot execution loop."""
         correlation_id = str(uuid.uuid4())[:12]
+        strategy = None
         try:
             self._running = True
             await self._client.send_bot_status(
@@ -57,6 +58,25 @@ class BotRunner:
                 )
                 return
 
+            # Wire strategy log callback to send logs to manager/UI.
+            async def _strategy_log(
+                message: str, level: str, corr_id: str | None
+            ) -> None:
+                await self._client.send_bot_log(
+                    self.bot_id, message, level=level,
+                    correlation_id=corr_id,
+                )
+
+            strategy.set_log_callback(_strategy_log, correlation_id)
+
+            # Wire strategy order callback to persist orders via manager.
+            async def _strategy_order(order_data: dict) -> None:
+                await self._client.send_order_update(
+                    self.bot_id, order_data
+                )
+
+            strategy.set_order_callback(_strategy_order)
+
             await self._client.send_bot_status(
                 self.bot_id, BOT_STATUS_RUNNING
             )
@@ -69,9 +89,24 @@ class BotRunner:
             # Strategy start (places initial orders etc.).
             await strategy.start()
 
-            # Main loop – wait for ticks.
+            # Main loop – poll price and feed ticks to the strategy.
             while self._running:
-                await asyncio.sleep(1)
+                try:
+                    ticker = await strategy._exchange.get_ticker_price(
+                        strategy._config.market
+                    )
+                    await strategy.on_tick(ticker.price)
+                except Exception as tick_exc:
+                    logger.warning(
+                        "Tick error for bot %d: %s", self.bot_id, tick_exc
+                    )
+                    await self._client.send_bot_log(
+                        self.bot_id,
+                        f"Tick error: {tick_exc}",
+                        level="WARNING",
+                        correlation_id=correlation_id,
+                    )
+                await asyncio.sleep(5)
 
         except asyncio.CancelledError:
             pass
@@ -84,11 +119,13 @@ class BotRunner:
                 self.bot_id, BOT_STATUS_FAULT
             )
         finally:
-            if self._running:
-                self._running = False
-                await self._client.send_bot_status(
-                    self.bot_id, BOT_STATUS_STOPPED
-                )
+            # Always stop the strategy (cancel orders etc.).
+            if strategy is not None:
+                try:
+                    await strategy.stop()
+                except Exception:
+                    logger.exception("Bot %d strategy stop error.", self.bot_id)
+            self._running = False
 
     async def stop(self) -> None:
         """Stop the bot gracefully."""
@@ -108,7 +145,7 @@ class BotRunner:
 
         Returns the strategy instance or None on failure.
         """
-        from manager.strategies.registry import StrategyRegistry
+        from manager.strategies import StrategyRegistry
         from manager.strategies.base import StrategyConfig
 
         strategy_name = self.config.get("strategy")
@@ -137,11 +174,26 @@ class BotRunner:
         await exchange_client.connect()
         await exchange_client.authenticate()
 
-        strategy_config = StrategyConfig(
-            market=market,
-            operator_id=operator_id,
-            budget_quote=budget_quote,
-            extra=extra,
+        # Build strategy-specific config with extra params as fields.
+        config_cls = strategy_cls.__init__.__annotations__.get(
+            "config", StrategyConfig
         )
+        config_fields = {
+            "market": market,
+            "operator_id": operator_id,
+            "budget_quote": budget_quote,
+        }
+        if extra and isinstance(extra, dict):
+            config_fields.update(extra)
 
-        return strategy_cls(exchange_client, strategy_config)
+        try:
+            strategy_config = config_cls(**config_fields)
+        except TypeError:
+            strategy_config = StrategyConfig(
+                market=market,
+                operator_id=operator_id,
+                budget_quote=budget_quote,
+                extra=extra,
+            )
+
+        return strategy_cls(strategy_config, exchange_client)

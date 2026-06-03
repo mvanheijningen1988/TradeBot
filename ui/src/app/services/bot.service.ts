@@ -64,6 +64,10 @@ export class BotService {
     return this.http.get<unknown[]>(`${this.url}/${id}/orders`);
   }
 
+  getOpenOrders(id: number): Observable<unknown[]> {
+    return this.http.get<unknown[]>(`${this.url}/${id}/open-orders`);
+  }
+
   getTrades(id: number): Observable<unknown[]> {
     return this.http.get<unknown[]>(`${this.url}/${id}/trades`);
   }

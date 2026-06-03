@@ -377,6 +377,21 @@ class OrderHistoryRepository:
         fee_paid: str = "0",
         fee_currency: str = "",
     ) -> int:
+        # Check if order already exists (e.g. synced from exchange).
+        existing = await self._db.fetch_one(
+            "SELECT id FROM order_history "
+            "WHERE bot_id = ? AND exchange_order_id = ?",
+            (bot_id, exchange_order_id),
+        )
+        if existing:
+            await self._db.execute(
+                "UPDATE order_history SET status = ?, "
+                "updated_at = datetime('now') WHERE id = ?",
+                (status, existing["id"]),
+            )
+            await self._db.commit()
+            return existing["id"]
+
         cursor = await self._db.execute(
             "INSERT INTO order_history "
             "(bot_id, exchange_order_id, market, side, order_type, "
@@ -407,6 +422,13 @@ class OrderHistoryRepository:
             "UPDATE order_history SET status = ?, "
             "updated_at = datetime('now') WHERE id = ?",
             (status, order_id),
+        )
+        await self._db.commit()
+
+    async def delete_by_bot(self, bot_id: int) -> None:
+        """Delete all order history for a bot."""
+        await self._db.execute(
+            "DELETE FROM order_history WHERE bot_id = ?", (bot_id,)
         )
         await self._db.commit()
 
@@ -454,6 +476,13 @@ class TradeHistoryRepository:
             (bot_id, limit),
         )
         return [dict(r) for r in rows]
+
+    async def delete_by_bot(self, bot_id: int) -> None:
+        """Delete all trade history for a bot."""
+        await self._db.execute(
+            "DELETE FROM trade_history WHERE bot_id = ?", (bot_id,)
+        )
+        await self._db.commit()
 
 
 # ── Budget history repository ────────────────────────────────────
@@ -550,8 +579,17 @@ class LogEntryRepository:
             conditions.append("worker_id = ?")
             params.append(worker_id)
         if level:
-            conditions.append("level = ?")
-            params.append(level)
+            level_order = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+            level_upper = level.upper()
+            if level_upper in level_order:
+                idx = level_order.index(level_upper)
+                allowed = level_order[idx:]
+                placeholders = ", ".join("?" for _ in allowed)
+                conditions.append(f"level IN ({placeholders})")
+                params.extend(allowed)
+            else:
+                conditions.append("level = ?")
+                params.append(level)
 
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
         params.append(limit)
@@ -559,5 +597,129 @@ class LogEntryRepository:
             f"SELECT * FROM log_entries {where} "
             "ORDER BY id DESC LIMIT ?",
             tuple(params),
+        )
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["timestamp"] = d.pop("created_at", None)
+            result.append(d)
+        return result
+
+
+# ── Wallet repository ────────────────────────────────────────────
+
+
+class WalletRepository:
+    """Virtual wallet and transaction persistence."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    async def get_by_exchange(self, exchange_id: int) -> Optional[dict]:
+        """Get wallet for an exchange."""
+        row = await self._db.fetch_one(
+            "SELECT * FROM wallets WHERE exchange_id = ?",
+            (exchange_id,),
+        )
+        return dict(row) if row else None
+
+    async def create(
+        self,
+        exchange_id: int,
+        quote_currency: str = "EUR",
+        balance: float = 0.0,
+    ) -> dict:
+        """Create a wallet for an exchange."""
+        cursor = await self._db.execute(
+            "INSERT INTO wallets (exchange_id, quote_currency, balance) "
+            "VALUES (?, ?, ?)",
+            (exchange_id, quote_currency, balance),
+        )
+        await self._db.commit()
+        row = await self._db.fetch_one(
+            "SELECT * FROM wallets WHERE id = ?",
+            (cursor.lastrowid,),
+        )
+        return dict(row)
+
+    async def update_balance(
+        self, wallet_id: int, new_balance: float
+    ) -> None:
+        """Set the wallet balance."""
+        await self._db.execute(
+            "UPDATE wallets SET balance = ?, "
+            "updated_at = datetime('now') WHERE id = ?",
+            (new_balance, wallet_id),
+        )
+        await self._db.commit()
+
+    async def add_transaction(
+        self,
+        wallet_id: int,
+        tx_type: str,
+        amount: float,
+        bot_id: Optional[int] = None,
+        description: str = "",
+    ) -> int:
+        """Record a wallet transaction."""
+        cursor = await self._db.execute(
+            "INSERT INTO wallet_transactions "
+            "(wallet_id, tx_type, amount, bot_id, description) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (wallet_id, tx_type, amount, bot_id, description),
+        )
+        await self._db.commit()
+        return cursor.lastrowid
+
+    async def get_transactions(
+        self, wallet_id: int, limit: int = 100
+    ) -> list[dict]:
+        """Return recent wallet transactions."""
+        rows = await self._db.fetch_all(
+            "SELECT * FROM wallet_transactions "
+            "WHERE wallet_id = ? ORDER BY id DESC LIMIT ?",
+            (wallet_id, limit),
+        )
+        return [dict(r) for r in rows]
+
+    async def get_allocated(self, wallet_id: int) -> float:
+        """Sum allocated budget across active bots for this wallet."""
+        wallet = await self._db.fetch_one(
+            "SELECT exchange_id FROM wallets WHERE id = ?",
+            (wallet_id,),
+        )
+        if not wallet:
+            return 0.0
+        rows = await self._db.fetch_all(
+            "SELECT COALESCE(SUM(budget_quote), 0) as total "
+            "FROM bots WHERE exchange_id = ? AND status != 'stopped'",
+            (wallet["exchange_id"],),
+        )
+        return float(rows[0]["total"]) if rows else 0.0
+
+    async def record_balance_snapshot(
+        self,
+        wallet_id: int,
+        balance: float,
+        allocated: float,
+        unallocated: float,
+    ) -> None:
+        """Record a wallet balance snapshot for trend graphs."""
+        await self._db.execute(
+            "INSERT INTO wallet_balance_history "
+            "(wallet_id, balance, allocated, unallocated) "
+            "VALUES (?, ?, ?, ?)",
+            (wallet_id, balance, allocated, unallocated),
+        )
+        await self._db.commit()
+
+    async def get_balance_history(
+        self, wallet_id: int, limit: int = 500
+    ) -> list[dict]:
+        """Return wallet balance history for trend graphs."""
+        rows = await self._db.fetch_all(
+            "SELECT * FROM wallet_balance_history "
+            "WHERE wallet_id = ? ORDER BY timestamp DESC LIMIT ?",
+            (wallet_id, limit),
         )
         return [dict(r) for r in rows]

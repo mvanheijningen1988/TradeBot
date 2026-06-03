@@ -48,10 +48,11 @@ class ParsedArticle(BaseModel):
 
 
 class SentimentResult(BaseModel):
-    """Output of VADER sentiment analysis."""
+    """Output of sentiment analysis (VADER, FinBERT, or ensemble)."""
 
     label: SentimentLabel
     score: float = Field(ge=-1.0, le=1.0)
+    model: str = "vader"
 
 
 class DetectedEvent(BaseModel):

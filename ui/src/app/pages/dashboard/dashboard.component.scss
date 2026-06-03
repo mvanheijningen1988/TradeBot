@@ -35,4 +35,213 @@
 canvas {
   width: 100% !important;
   height: 100% !important;
+  cursor: crosshair;
+}
+
+// Bot settings tooltip
+.bot-name-cell {
+  position: relative;
+  cursor: default;
+
+  &:hover .bot-tooltip {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
+.bot-tooltip {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  min-width: 240px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #12121a;
+  border: 1px solid var(--neon-blue);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 12px rgba(0, 170, 255, 0.1);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s, visibility 0.15s;
+  z-index: 999;
+}
+
+.bot-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+
+  .text-muted {
+    color: var(--text-muted);
+  }
+}
+
+// Chart tooltip
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(10, 10, 25, 0.92);
+  border: 1px solid rgba(0, 170, 255, 0.5);
+  border-radius: 6px;
+  padding: 6px 10px;
+  z-index: 10;
+  white-space: nowrap;
+  box-shadow: 0 0 12px rgba(0, 170, 255, 0.25);
+}
+
+.chart-tooltip-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #00aaff;
+}
+
+.chart-tooltip-time {
+  font-size: 10px;
+  color: #888;
+  margin-top: 2px;
+}
+
+// Wallet
+.wallet-section {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-color);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.wallet-stats {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 12px;
+}
+
+.wallet-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+
+  span:last-child {
+    font-size: 16px;
+    font-weight: 600;
+  }
+}
+
+.wallet-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.wallet-action-group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+
+  .input-sm {
+    width: 100px;
+    padding: 4px 8px;
+    font-size: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+// Grid modal
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.modal-dialog {
+  position: relative;
+  max-width: 92vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 170, 255, 0.06);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-title {
+  font-size: 18px;
+  margin: 0;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+
+  &:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+}
+
+.modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.grid-row-active {
+  background: rgba(0, 170, 255, 0.04);
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  transition: border-color 0.15s, color 0.15s;
+
+  &:hover {
+    border-color: var(--neon-blue);
+    color: var(--neon-blue);
+  }
+}
+
+.table-sm {
+  font-size: 12px;
+
+  th, td {
+    padding: 6px 10px;
+  }
 }

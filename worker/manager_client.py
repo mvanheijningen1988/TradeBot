@@ -15,6 +15,7 @@ from manager.constants import (
     WS_TYPE_BOT_STATUS,
     WS_TYPE_ERROR,
     WS_TYPE_HEARTBEAT,
+    WS_TYPE_ORDER_UPDATE,
     WS_TYPE_WORKER_LOG,
 )
 
@@ -150,6 +151,18 @@ class ManagerClient:
         """Report an error for a bot."""
         await self._send(
             {"type": WS_TYPE_ERROR, "bot_id": bot_id, "message": message}
+        )
+
+    async def send_order_update(
+        self, bot_id: int, order_data: dict
+    ) -> None:
+        """Report an order event (placed/filled/cancelled) to the Manager."""
+        await self._send(
+            {
+                "type": WS_TYPE_ORDER_UPDATE,
+                "bot_id": bot_id,
+                **order_data,
+            }
         )
 
     async def send_worker_log(
