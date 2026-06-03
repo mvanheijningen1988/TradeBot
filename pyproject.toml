@@ -17,6 +17,9 @@ dependencies = [
     "bcrypt>=4.0,<5",
     "python-multipart>=0.0.9",
     "httpx>=0.27",
+    "aiohttp>=3.9",
+    "feedparser>=6.0",
+    "vaderSentiment>=3.3",
 ]
 
 [project.optional-dependencies]
@@ -34,7 +37,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
-include = ["manager*", "worker*", "shared*"]
+include = ["manager*", "worker*", "shared*", "services*"]
 
 [tool.black]
 line-length = 88

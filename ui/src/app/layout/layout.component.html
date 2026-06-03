@@ -1,33 +1,129 @@
-<div class="layout">
+<div class="layout" [class.sidebar-collapsed]="sidebarCollapsed" [class.signals-open]="signalsPanelOpen">
+  <!-- Left sidebar -->
   <nav class="sidebar">
-    <div class="sidebar-logo">
-      <span class="text-blue">Trade</span><span class="text-green">Bot</span>
+    <div class="sidebar-top">
+      <div class="sidebar-logo">
+        <span class="text-blue">T</span><span class="text-green">B</span>
+        <span class="sidebar-logo-full"><span class="text-blue">Trade</span><span class="text-green">Bot</span></span>
+      </div>
+      <button class="sidebar-toggle" (click)="toggleSidebar()" title="Toggle menu">
+        <i class="toggle-icon fa-solid" [class.fa-angles-right]="sidebarCollapsed" [class.fa-angles-left]="!sidebarCollapsed"></i>
+      </button>
     </div>
     <div class="sidebar-nav">
-      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-item">
-        <span class="nav-icon">◈</span> Dashboard
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-item" title="Dashboard">
+        <i class="nav-icon fa-solid fa-gauge-high"></i>
+        <span class="nav-label">Dashboard</span>
       </a>
-      <a routerLink="/workers" routerLinkActive="active" class="nav-item">
-        <span class="nav-icon">⬡</span> Workers
+      <a routerLink="/workers" routerLinkActive="active" class="nav-item" title="Workers">
+        <i class="nav-icon fa-solid fa-server"></i>
+        <span class="nav-label">Workers</span>
         @if (pendingWorkers > 0) {
           <span class="nav-badge">{{ pendingWorkers }}</span>
         }
       </a>
-      <a routerLink="/settings" routerLinkActive="active" class="nav-item">
-        <span class="nav-icon">⚙</span> Settings
+      <a routerLink="/settings" routerLinkActive="active" class="nav-item" title="Settings">
+        <i class="nav-icon fa-solid fa-gear"></i>
+        <span class="nav-label">Settings</span>
       </a>
-      <a routerLink="/diagnostics" routerLinkActive="active" class="nav-item">
-        <span class="nav-icon">◉</span> Diagnostics
+      <a routerLink="/diagnostics" routerLinkActive="active" class="nav-item" title="Diagnostics">
+        <i class="nav-icon fa-solid fa-stethoscope"></i>
+        <span class="nav-label">Diagnostics</span>
       </a>
     </div>
     <div class="sidebar-footer">
-      <div class="mono text-muted" style="font-size: 11px; margin-bottom: 8px">
+      <div class="nav-label mono text-muted" style="font-size: 11px; margin-bottom: 8px">
         {{ currentUser?.username }}
       </div>
-      <button class="btn btn-sm" (click)="logout()">Logout</button>
+      <button class="btn btn-sm" (click)="logout()" title="Logout">
+        <i class="nav-icon fa-solid fa-right-from-bracket" style="font-size:12px"></i>
+        <span class="nav-label">Logout</span>
+      </button>
     </div>
   </nav>
+
+  <!-- Main content -->
   <main class="main-content">
     <router-outlet />
   </main>
+
+  <!-- Right signals panel -->
+  <aside class="signals-panel">
+    <button class="signals-panel-toggle" (click)="toggleSignalsPanel()" title="Toggle signals">
+      <i class="toggle-icon fa-solid" [class.fa-angles-right]="signalsPanelOpen" [class.fa-angles-left]="!signalsPanelOpen"></i>
+      @if (!signalsPanelOpen && signalCount > 0) {
+        <span class="signals-badge">{{ signalCount }}</span>
+      }
+    </button>
+    <div class="signals-panel-content">
+      <h3 class="signals-panel-title mono text-blue">Signals</h3>
+
+      <!-- Bullish -->
+      <div class="signals-section">
+        <h4 class="mono text-green signals-section-title">
+          <span class="signal-icon">▲</span> Consider Investing
+        </h4>
+        @if (investSignals.length > 0) {
+          <div class="signal-list">
+            @for (sig of investSignals; track sig.coin) {
+              <div class="signal-row">
+                <div
+                  class="signal-coin mono signal-coin--hoverable"
+                  (mouseenter)="showTooltip($event, sig, true)"
+                  (mouseleave)="hideTooltip()"
+                >{{ sig.coin }}</div>
+                <div class="signal-details">
+                  <span class="badge badge-bullish">{{ sig.signal }}</span>
+                  <span class="signal-score mono text-green">{{ sig.score | number:'1.2-2' }}</span>
+                </div>
+                <div class="signal-reason text-muted">{{ sig.reason }}</div>
+              </div>
+            }
+          </div>
+        } @else {
+          <div class="text-muted mono" style="font-size:11px; padding: 8px 0">No bullish signals.</div>
+        }
+      </div>
+
+      <!-- Bearish -->
+      <div class="signals-section">
+        <h4 class="mono text-red signals-section-title">
+          <span class="signal-icon">▼</span> Consider Removing
+        </h4>
+        @if (removeSignals.length > 0) {
+          <div class="signal-list">
+            @for (sig of removeSignals; track sig.coin) {
+              <div class="signal-row">
+                <div
+                  class="signal-coin mono signal-coin--hoverable"
+                  (mouseenter)="showTooltip($event, sig, false)"
+                  (mouseleave)="hideTooltip()"
+                >{{ sig.coin }}</div>
+                <div class="signal-details">
+                  <span class="badge badge-bearish">{{ sig.signal }}</span>
+                  <span class="signal-score mono text-red">{{ sig.score | number:'1.2-2' }}</span>
+                </div>
+                <div class="signal-reason text-muted">{{ sig.reason }}</div>
+              </div>
+            }
+          </div>
+        } @else {
+          <div class="text-muted mono" style="font-size:11px; padding: 8px 0">No bearish signals.</div>
+        }
+      </div>
+    </div>
+  </aside>
+
+  <!-- Signal tooltip -->
+  @if (hoveredSignal) {
+    <app-signal-tooltip
+      [signal]="hoveredSignal"
+      [isBuy]="hoveredIsBuy"
+      [style.position]="'fixed'"
+      [style.top.px]="tooltipTop"
+      [style.left.px]="tooltipLeft"
+      (mouseenter)="keepTooltip()"
+      (mouseleave)="hideTooltip()"
+    ></app-signal-tooltip>
+  }
 </div>

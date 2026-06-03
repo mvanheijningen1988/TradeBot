@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir .
 
 COPY shared/ ./shared/
 COPY manager/ ./manager/
+COPY services/ ./services/
 
 EXPOSE 8000
 

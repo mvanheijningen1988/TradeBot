@@ -36,6 +36,12 @@ from manager.services.worker_service import WorkerService
 
 logger = logging.getLogger(__name__)
 
+try:
+    from services.news_engine.main import NewsEngineService
+except ImportError:
+    NewsEngineService = None
+    logger.warning("News engine not available – services package not found")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -89,6 +95,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await coin_icon_service.load()
     app.state.coin_icon_service = coin_icon_service
 
+    # News Signal Engine.
+    if NewsEngineService is not None:
+        news_engine = NewsEngineService(db=db)
+        await news_engine.start()
+        app.state.news_engine = news_engine
+
     logger.info(
         "TradeBot Manager started on %s:%d", config.host, config.port
     )
@@ -96,6 +108,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     # Shutdown.
+    if hasattr(app.state, "news_engine"):
+        await app.state.news_engine.stop()
     if hasattr(app.state, "worker_service"):
         await app.state.worker_service.stop_health_monitor()
     if hasattr(app.state, "db"):

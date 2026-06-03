@@ -1,3 +1,6 @@
+// Login — component-specific styles only
+// General styles (error-msg, etc.) are in styles.scss
+
 .login-container {
   display: flex;
   align-items: center;
@@ -19,11 +22,4 @@
   font-weight: 700;
   margin-bottom: 32px;
   text-shadow: var(--glow-blue);
-}
-
-.error-msg {
-  color: var(--neon-red);
-  margin-bottom: 12px;
-  font-family: var(--font-mono);
-  font-size: 12px;
 }

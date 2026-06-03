@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, inject, ElementRef, ViewChild } from '@an
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { Subscription, forkJoin } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { BotService, Bot } from '../../services/bot.service';
 import { ExchangeService, Exchange, Balance } from '../../services/exchange.service';
 import { WebSocketService } from '../../services/websocket.service';
@@ -21,9 +21,9 @@ interface BudgetPoint {
   styleUrl: './dashboard.component.scss',
 })
 export class DashboardComponent implements OnInit, OnDestroy {
-  private botService = inject(BotService);
-  private exchangeService = inject(ExchangeService);
-  private wsService = inject(WebSocketService);
+  private readonly botService = inject(BotService);
+  private readonly exchangeService = inject(ExchangeService);
+  private readonly wsService = inject(WebSocketService);
   private wsSub?: Subscription;
 
   @ViewChild('budgetChart') budgetChartRef!: ElementRef<HTMLCanvasElement>;
