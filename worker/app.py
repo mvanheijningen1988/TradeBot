@@ -5,22 +5,15 @@ bots in-process.  Reports status, performance, and logs via WebSocket.
 """
 
 import asyncio
-import json
 import logging
 import os
 import platform
+import re
 import signal
-import uuid
 from typing import Optional
-
-import websockets
 
 from manager.constants import (
     WS_TYPE_ASSIGN,
-    WS_TYPE_BOT_LOG,
-    WS_TYPE_BOT_STATUS,
-    WS_TYPE_ERROR,
-    WS_TYPE_HEARTBEAT,
     WS_TYPE_SET_LOG_LEVEL,
     WS_TYPE_START_BOT,
     WS_TYPE_STOP_BOT,
@@ -31,12 +24,80 @@ from worker.manager_client import ManagerClient
 logger = logging.getLogger(__name__)
 
 
+class _WorkerForwardLogHandler(logging.Handler):
+    """Forward worker process logs to manager diagnostics stream."""
+
+    def __init__(self, app: "WorkerApp") -> None:
+        super().__init__()
+        self._app = app
+        self._bot_id_pattern = re.compile(r"\\b[bB]ot\\s+(\\d+)\\b")
+        self._excluded_prefixes = (
+            "worker.manager_client",
+            "websockets",
+            "httpx",
+            "httpcore",
+            "asyncio",
+        )
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if any(
+            record.name.startswith(prefix)
+            for prefix in self._excluded_prefixes
+        ):
+            return
+
+        client = self._app._client
+        if client is None:
+            return
+
+        try:
+            message = record.getMessage()
+        except Exception:
+            return
+
+        level = record.levelname.upper()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        loop.create_task(
+            self._forward(client, record.name, message, level)
+        )
+
+    async def _forward(
+        self,
+        client: ManagerClient,
+        logger_name: str,
+        message: str,
+        level: str,
+    ) -> None:
+        match = self._bot_id_pattern.search(message)
+        if logger_name.startswith("worker.bot_runner") and match:
+            await client.send_bot_log(
+                int(match.group(1)),
+                message,
+                level=level,
+            )
+            return
+
+        await client.send_worker_log(
+            message,
+            level=level,
+            subcategory=logger_name,
+        )
+
+
 class WorkerApp:
     """Worker Node main application."""
 
     def __init__(self) -> None:
+        self.address: str = os.getenv(
+            "WORKER_ADDRESS", platform.node()
+        )
+        default_agent_id = f"worker-{self.address}"
         self.agent_id: str = os.getenv(
-            "WORKER_AGENT_ID", str(uuid.uuid4())[:8]
+            "WORKER_AGENT_ID", default_agent_id
         )
         self.manager_url: str = os.getenv(
             "MANAGER_URL", "http://localhost:8000"
@@ -45,13 +106,11 @@ class WorkerApp:
             "MANAGER_WS_URL", "ws://localhost:8000/ws/worker"
         )
         self.version: str = "0.2.0"
-        self.address: str = os.getenv(
-            "WORKER_ADDRESS", platform.node()
-        )
 
         self._client: Optional[ManagerClient] = None
         self._runners: dict[int, BotRunner] = {}
         self._running = False
+        self._forward_log_handler: Optional[logging.Handler] = None
 
     async def start(self) -> None:
         """Register with manager and start the main loop."""
@@ -80,6 +139,10 @@ class WorkerApp:
             logger.error("Failed to connect WebSocket. Exiting.")
             return
 
+        if self._forward_log_handler is None:
+            self._forward_log_handler = _WorkerForwardLogHandler(self)
+            logging.getLogger().addHandler(self._forward_log_handler)
+
         self._running = True
         logger.info(
             "Worker %s started, connected to %s",
@@ -101,10 +164,13 @@ class WorkerApp:
         """Stop all bots and disconnect."""
         self._running = False
         for bot_id, runner in list(self._runners.items()):
-            await runner.stop()
+            await runner.stop(report_stopped=False, cancel_strategy=False)
         self._runners.clear()
         if self._client:
             await self._client.disconnect()
+        if self._forward_log_handler is not None:
+            logging.getLogger().removeHandler(self._forward_log_handler)
+            self._forward_log_handler = None
         logger.info("Worker %s stopped.", self.agent_id)
 
     async def _heartbeat_loop(self) -> None:
@@ -183,7 +249,7 @@ class WorkerApp:
                 self._runners.pop(bot_id, None)
                 logger.debug("Bot %d runner removed from registry.", bot_id)
 
-        asyncio.create_task(_run_and_cleanup())
+        runner.attach_task(asyncio.create_task(_run_and_cleanup()))
         logger.info("Bot %d started.", bot_id)
         await self._client.send_worker_log(
             f"Bot {bot_id} started on worker",

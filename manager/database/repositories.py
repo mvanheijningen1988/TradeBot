@@ -28,11 +28,13 @@ class UserRepository:
         password_hash: str,
         role: str = "user",
         language: str = "en",
+        time_display: str = "local",
     ) -> int:
         cursor = await self._db.execute(
-            "INSERT INTO users (username, password_hash, role, language) "
-            "VALUES (?, ?, ?, ?)",
-            (username, password_hash, role, language),
+            "INSERT INTO users "
+            "(username, password_hash, role, language, time_display) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (username, password_hash, role, language, time_display),
         )
         await self._db.commit()
         return cursor.lastrowid
@@ -51,12 +53,19 @@ class UserRepository:
 
     async def list_all(self) -> list[dict]:
         rows = await self._db.fetch_all(
-            "SELECT id, username, role, language, created_at FROM users"
+            "SELECT id, username, role, language, time_display, "
+            "created_at FROM users"
         )
         return [dict(r) for r in rows]
 
     async def update(self, user_id: int, **fields: Any) -> None:
-        allowed = {"username", "password_hash", "role", "language"}
+        allowed = {
+            "username",
+            "password_hash",
+            "role",
+            "language",
+            "time_display",
+        }
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
             return
@@ -342,6 +351,15 @@ class BotRepository:
         await self._db.commit()
 
     async def delete(self, bot_id: int) -> None:
+        # Clean FK-dependent rows that reference bots.id.
+        await self._db.execute(
+            "DELETE FROM wallet_transactions WHERE bot_id = ?",
+            (bot_id,),
+        )
+        await self._db.execute(
+            "DELETE FROM budget_history WHERE bot_id = ?",
+            (bot_id,),
+        )
         await self._db.execute(
             "DELETE FROM bots WHERE id = ?", (bot_id,)
         )

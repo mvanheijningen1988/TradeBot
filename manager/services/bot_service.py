@@ -4,7 +4,6 @@ Handles creation, assignment, start/stop, deletion, and state
 transitions for trading bots.
 """
 
-import json
 import logging
 from typing import Any, Optional
 
@@ -345,9 +344,10 @@ class BotService:
                     bot_id,
                 )
 
-        # Delete order and trade history from DB.
-        await self._order_repo.delete_by_bot(bot_id)
+        # Delete trade history before order history to satisfy FK
+        # from trade_history.order_history_id -> order_history.id.
         await self._trade_repo.delete_by_bot(bot_id)
+        await self._order_repo.delete_by_bot(bot_id)
 
         await self._bot_repo.update_status(bot_id, BOT_STATUS_STOPPED)
         await self._bot_repo.delete(bot_id)

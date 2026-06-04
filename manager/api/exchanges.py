@@ -3,6 +3,8 @@
 Provides cached market data, fees, balances, and coin icons.
 """
 
+import logging
+
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -11,6 +13,23 @@ from pydantic import BaseModel
 from manager.api.deps import get_current_user, require_admin
 
 router = APIRouter(prefix="/exchanges", tags=["exchanges"])
+logger = logging.getLogger(__name__)
+
+
+async def _persist_exchange_error(request: Request, message: str) -> None:
+    """Persist exchange API errors to DB-backed diagnostics logs."""
+    log_service = getattr(request.app.state, "log_service", None)
+    if not log_service:
+        return
+    try:
+        await log_service.persist(
+            category="manager",
+            subcategory="api.exchanges",
+            level="ERROR",
+            message=message,
+        )
+    except Exception:
+        logger.debug("Failed to persist exchange error log entry.")
 
 
 class CreateExchangeRequest(BaseModel):
@@ -138,7 +157,17 @@ async def get_fees(
     return result
 
 
-@router.get("/{exchange_id}/balances")
+@router.get(
+    "/{exchange_id}/balances",
+    responses={
+        502: {
+            "description": (
+                "Exchange balance fetch failed due to upstream "
+                "API/auth issue."
+            )
+        }
+    },
+)
 async def get_balances(
     exchange_id: int,
     request: Request,
@@ -146,13 +175,38 @@ async def get_balances(
 ):
     """Return current exchange balances."""
     client = await _get_exchange_client(request, exchange_id)
-    balances = await client.get_balance()
-    result = [
-        {"symbol": b.symbol, "available": b.available, "in_order": b.in_order}
-        for b in balances
-    ]
-    await client.disconnect()
-    return result
+    try:
+        balances = await client.get_balance()
+        return [
+            {
+                "symbol": b.symbol,
+                "available": b.available,
+                "in_order": b.in_order,
+            }
+            for b in balances
+        ]
+    except Exception as exc:
+        await _persist_exchange_error(
+            request,
+            (
+                f"Exchange {exchange_id} balance fetch failed: {exc}. "
+                "Verify API credentials and permissions."
+            ),
+        )
+        logger.warning(
+            "Failed to load balances for exchange %d: %s",
+            exchange_id,
+            exc,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Failed to load exchange balances. Verify exchange API "
+                "credentials and permissions."
+            ),
+        ) from exc
+    finally:
+        await client.disconnect()
 
 
 @router.get("/{exchange_id}/budget-available")
@@ -220,6 +274,26 @@ async def _get_exchange_client(request: Request, exchange_id: int):
         api_key=exchange["api_key"],
         api_secret=exchange["api_secret"],
     )
-    await client.connect()
-    await client.authenticate()
+    try:
+        await client.connect()
+        await client.authenticate()
+    except Exception as exc:
+        await _persist_exchange_error(
+            request,
+            (
+                f"Exchange {exchange_id} client init failed: {exc}. "
+                "Connect/authenticate could not complete."
+            ),
+        )
+        logger.exception(
+            "Failed to initialize exchange client for exchange %d.",
+            exchange_id,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Failed to connect/authenticate exchange API. "
+                "Check API key, secret, and exchange permissions."
+            ),
+        ) from exc
     return client

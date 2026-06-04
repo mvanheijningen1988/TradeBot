@@ -67,7 +67,7 @@
     <div class="log-container">
       @for (log of logs; track log.id) {
         <div class="log-line" [class]="'log-' + log.level.toLowerCase()">
-          <span class="text-muted">{{ log.timestamp }}</span>
+          <span class="text-muted">{{ log.timestamp | appDateTime }}</span>
           <span class="log-level">[{{ log.level }}]</span>
           <span class="text-blue">{{ log.category }}</span>
           @if (log.correlation_id) {

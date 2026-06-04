@@ -25,6 +25,7 @@ class UserResponse(BaseModel):
     username: str
     role: str
     language: str
+    time_display: str
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -41,7 +42,11 @@ async def login(body: LoginRequest, request: Request):
     return TokenResponse(access_token=token)
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    responses={404: {"description": "Authenticated user not found."}},
+)
 async def get_me(
     request: Request,
     payload: Annotated[dict, Depends(get_current_user)],
@@ -56,4 +61,5 @@ async def get_me(
         username=user["username"],
         role=user["role"],
         language=user["language"],
+        time_display=user.get("time_display", "local"),
     )

@@ -16,6 +16,7 @@ class UpdateUserRequest(BaseModel):
     password: Optional[str] = None
     role: Optional[str] = None
     language: Optional[str] = None
+    time_display: Optional[str] = None
 
 
 class CreateUserRequest(BaseModel):
@@ -23,10 +24,15 @@ class CreateUserRequest(BaseModel):
     password: str
     role: str = "user"
     language: str = "en"
+    time_display: str = "local"
 
 
 class UpdateLanguageRequest(BaseModel):
     language: str
+
+
+class UpdateTimeDisplayRequest(BaseModel):
+    time_display: str
 
 
 @router.get("/users")
@@ -51,6 +57,7 @@ async def create_user(
         password_hash=hashed,
         role=body.role,
         language=body.language,
+        time_display=body.time_display,
     )
     return {"id": user_id, "username": body.username}
 
@@ -81,7 +88,10 @@ async def delete_user(
     return {"detail": "User deleted."}
 
 
-@router.put("/language")
+@router.put(
+    "/language",
+    responses={400: {"description": "Unsupported language value."}},
+)
 async def update_language(
     body: UpdateLanguageRequest,
     request: Request,
@@ -96,6 +106,29 @@ async def update_language(
         int(payload["sub"]), language=body.language
     )
     return {"detail": "Language updated."}
+
+
+@router.put(
+    "/time-display",
+    responses={400: {"description": "Unsupported time display value."}},
+)
+async def update_time_display(
+    body: UpdateTimeDisplayRequest,
+    request: Request,
+    payload: Annotated[dict, Depends(get_current_user)],
+):
+    """Update the current user's date/time display preference."""
+    if body.time_display not in ("local", "utc"):
+        raise HTTPException(
+            status_code=400,
+            detail="Supported time display values: local, utc",
+        )
+
+    await request.app.state.user_repo.update(
+        int(payload["sub"]),
+        time_display=body.time_display,
+    )
+    return {"detail": "Time display updated."}
 
 
 @router.get("/strategies")

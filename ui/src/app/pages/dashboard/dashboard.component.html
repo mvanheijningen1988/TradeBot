@@ -96,7 +96,9 @@
     @for (ex of exchanges; track ex.id) {
       <div style="margin-bottom: 16px">
         <h3 class="mono text-green" style="margin-bottom: 8px; font-size: 14px">{{ ex.name }}</h3>
-        @if (getBalances(ex.id).length) {
+        @if (getBalanceError(ex.id)) {
+          <div class="text-red mono" style="font-size: 12px">{{ getBalanceError(ex.id) }}</div>
+        } @else if (getBalances(ex.id).length) {
           <div class="balance-grid">
             @for (bal of getBalances(ex.id); track bal.symbol) {
               <div class="balance-card">
@@ -181,7 +183,7 @@
                       {{ tx.amount >= 0 ? '+' : '' }}{{ tx.amount | number:'1.2-2' }}
                     </td>
                     <td class="text-muted">{{ tx.description }}</td>
-                    <td class="mono text-muted">{{ tx.created_at }}</td>
+                    <td class="mono text-muted">{{ tx.created_at | appDateTime }}</td>
                   </tr>
                 } @empty {
                   <tr><td colspan="4" class="text-muted" style="text-align:center">No transactions.</td></tr>
@@ -276,7 +278,7 @@
               <td class="mono">{{ order['amount'] }}</td>
               <td class="mono">{{ order['price'] }}</td>
               <td><span class="badge badge-running">{{ order['status'] }}</span></td>
-              <td class="mono text-muted">{{ order['created_at'] }}</td>
+              <td class="mono text-muted">{{ order['created_at'] | appDateTime }}</td>
             </tr>
           } @empty {
             <tr>
@@ -315,7 +317,7 @@
               <td class="mono">{{ order['amount'] }}</td>
               <td class="mono">{{ order['price'] }}</td>
               <td><span class="badge" [class]="'badge-' + (order['status'] === 'filled' ? 'running' : 'stopped')">{{ order['status'] }}</span></td>
-              <td class="mono text-muted">{{ order['created_at'] }}</td>
+              <td class="mono text-muted">{{ order['created_at'] | appDateTime }}</td>
             </tr>
           } @empty {
             <tr>
@@ -352,7 +354,7 @@
               <td class="mono">{{ trade['amount'] }}</td>
               <td class="mono">{{ trade['price'] }}</td>
               <td class="mono text-muted">{{ trade['fee'] }}</td>
-              <td class="mono text-muted">{{ trade['created_at'] }}</td>
+              <td class="mono text-muted">{{ trade['created_at'] | appDateTime }}</td>
             </tr>
           } @empty {
             <tr>
@@ -375,13 +377,19 @@
   >
     <div
       class="modal-dialog"
+      [class.dragging]="isModalDragging"
+      [style.transform]="'translate(' + modalOffsetX + 'px, ' + modalOffsetY + 'px)'"
       (click)="$event.stopPropagation()"
       (keydown.escape)="gridModalBot = null"
       style="width: 480px"
     >
-      <div class="modal-header">
+      <div class="modal-header" (mousedown)="startModalDrag($event)">
         <h3 class="modal-title mono text-blue">Grid — {{ gridModalBot.name }}</h3>
-        <button class="modal-close" (click)="gridModalBot = null">&times;</button>
+        <button
+          class="modal-close"
+          (mousedown)="$event.stopPropagation()"
+          (click)="gridModalBot = null"
+        >&times;</button>
       </div>
       <div class="modal-body">
         <div class="grid-info mono" style="margin-bottom: 12px; font-size: 12px; color: var(--text-muted)">

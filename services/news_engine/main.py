@@ -14,12 +14,14 @@ TradeBot Manager FastAPI application.
 """
 
 import asyncio
+import contextlib
 import logging
 from typing import Optional
 
 from services.news_engine.collector.news_collector import NewsCollector
 from services.news_engine.config.coin_map import CoinMap
 from services.news_engine.ml.event_classifier import EventClassifier
+from services.news_engine.ml.rsi_model import RSIModel
 from services.news_engine.ml.sentiment_model import SentimentModel
 from services.news_engine.processing.article_parser import ArticleParser
 from services.news_engine.processing.coin_extractor import CoinExtractor
@@ -42,6 +44,7 @@ class NewsEngineService:
         self._extractor = CoinExtractor(self._coin_map)
         self._sentiment = SentimentModel()
         self._event_classifier = EventClassifier()
+        self._rsi_model = RSIModel(db=db)
         self._signal_engine = SignalEngine()
         self._store = SignalStore(db=db)
         self._task: Optional[asyncio.Task] = None
@@ -80,10 +83,8 @@ class NewsEngineService:
         self._running = False
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
         await self._collector.close()
         logger.info("Crypto News Signal Engine stopped.")
 
@@ -92,10 +93,8 @@ class NewsEngineService:
         while self._running:
             try:
                 await self._process_cycle()
-            except Exception as exc:
-                logger.error(
-                    "Processing cycle failed: %s", exc, exc_info=True
-                )
+            except Exception:
+                logger.exception("Processing cycle failed")
             await asyncio.sleep(_POLL_INTERVAL)
 
     async def _process_cycle(self) -> None:
@@ -122,11 +121,10 @@ class NewsEngineService:
                 for sig in signals:
                     await self._store.save_signal(sig)
                     signal_count += 1
-            except Exception as exc:
-                logger.error(
-                    "Failed to process article %s: %s",
+            except Exception:
+                logger.exception(
+                    "Failed to process article %s",
                     article.url,
-                    exc,
                 )
 
         logger.info(
@@ -162,12 +160,16 @@ class NewsEngineService:
         # Step 5: Event detection.
         events = self._event_classifier.detect(parsed.text)
 
-        # Step 6: Generate signals.
+        # Step 6: RSI context.
+        rsi_context = await self._rsi_model.analyse(coins)
+
+        # Step 7: Generate signals.
         signals = self._signal_engine.generate_signals(
             article=parsed,
             coins=coins,
             sentiment=sentiment,
             events=events,
+            rsi_context=rsi_context,
         )
 
         return signals
@@ -192,10 +194,9 @@ class NewsEngineService:
                 for sig in signals:
                     await self._store.save_signal(sig)
                     count += 1
-            except Exception as exc:
-                logger.error(
-                    "Failed to process article %s: %s",
+            except Exception:
+                logger.exception(
+                    "Failed to process article %s",
                     article.url,
-                    exc,
                 )
         return count

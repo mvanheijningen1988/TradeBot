@@ -13,6 +13,10 @@ export interface NewsSignal {
   article_url: string;
   timestamp: string;
   event_type: string | null;
+  rsi_short?: number | null;
+  rsi_long?: number | null;
+  rsi_state?: string | null;
+  investment_horizon?: string;
 }
 
 export interface SignalRecommendation {
@@ -24,6 +28,10 @@ export interface SignalRecommendation {
   source: string;
   article_url: string;
   timestamp: string;
+  rsi_short?: number | null;
+  rsi_long?: number | null;
+  rsi_state?: string | null;
+  investment_horizon?: string;
 }
 
 export interface Recommendations {

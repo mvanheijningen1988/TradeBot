@@ -8,17 +8,18 @@ import {
   SystemStats,
 } from '../../services/diagnostics.service';
 import { DropdownComponent, DropdownOption } from '../../shared/dropdown/dropdown.component';
+import { AppDateTimePipe } from '../../shared/pipes/app-datetime.pipe';
 
 @Component({
   selector: 'app-diagnostics',
   standalone: true,
-  imports: [CommonModule, FormsModule, DropdownComponent],
+  imports: [CommonModule, FormsModule, DropdownComponent, AppDateTimePipe],
   templateUrl: './diagnostics.component.html',
   styleUrl: './diagnostics.component.scss',
 })
 export class DiagnosticsComponent implements OnInit {
-  private diagService = inject(DiagnosticsService);
-  private route = inject(ActivatedRoute);
+  private readonly diagService = inject(DiagnosticsService);
+  private readonly route = inject(ActivatedRoute);
 
   stats: SystemStats | null = null;
   logs: LogEntry[] = [];
@@ -50,7 +51,7 @@ export class DiagnosticsComponent implements OnInit {
     this.diagService.getStats().subscribe((s) => (this.stats = s));
     const botId = this.route.snapshot.queryParamMap.get('bot_id');
     if (botId) {
-      this.filterBotId = parseInt(botId, 10);
+      this.filterBotId = Number.parseInt(botId, 10);
     }
     this.searchLogs();
     this.loadLogLevels();

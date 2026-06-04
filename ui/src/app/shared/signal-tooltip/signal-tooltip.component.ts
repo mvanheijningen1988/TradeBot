@@ -33,6 +33,24 @@ import { SignalRecommendation } from '../../services/signals.service';
         <span class="signal-tooltip__label">Confidence</span>
         <span class="signal-tooltip__value mono">{{ (signal.confidence * 100).toFixed(0) }}%</span>
       </div>
+      @if (signal.rsi_short !== null && signal.rsi_short !== undefined) {
+        <div class="signal-tooltip__row">
+          <span class="signal-tooltip__label">RSI (9)</span>
+          <span class="signal-tooltip__value mono">{{ signal.rsi_short.toFixed(2) }}</span>
+        </div>
+      }
+      @if (signal.rsi_long !== null && signal.rsi_long !== undefined) {
+        <div class="signal-tooltip__row">
+          <span class="signal-tooltip__label">RSI (14)</span>
+          <span class="signal-tooltip__value mono">{{ signal.rsi_long.toFixed(2) }}</span>
+        </div>
+      }
+      @if (signal.investment_horizon) {
+        <div class="signal-tooltip__row">
+          <span class="signal-tooltip__label">Horizon</span>
+          <span class="signal-tooltip__value">{{ formatHorizon(signal.investment_horizon) }}</span>
+        </div>
+      }
       <div class="signal-tooltip__row signal-tooltip__row--wrap">
         <span class="signal-tooltip__label">{{ reasons.length > 1 ? 'Reasons' : 'Reason' }}</span>
         <span class="signal-tooltip__value signal-tooltip__value--wrap">{{ reasons.join(' · ') | titlecase }}</span>
@@ -209,6 +227,14 @@ export class SignalTooltipComponent {
       .split(',')
       .map(r => r.trim().replaceAll('_', ' '))
       .filter(r => r.length > 0);
+  }
+
+  formatHorizon(value: string): string {
+    if (value === 'long_term') return 'Long-term';
+    if (value === 'short_term') return 'Short-term (Day Trading)';
+    if (value === 'both') return 'Both';
+    if (value === 'avoid') return 'Avoid for now';
+    return 'Unknown';
   }
 
   private readonly eventDescriptions: Record<string, { buy: string; sell: string }> = {

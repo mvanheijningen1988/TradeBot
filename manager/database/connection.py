@@ -5,7 +5,6 @@ connect when the database file does not yet exist.
 """
 
 import logging
-from pathlib import Path
 from typing import Optional
 
 import aiosqlite
@@ -30,6 +29,7 @@ class Database:
         await self._db.execute("PRAGMA foreign_keys=ON")
 
         await self._create_schema()
+        await self._run_migrations()
         logger.info("Database connected: %s", self._db_path)
 
     async def close(self) -> None:
@@ -45,6 +45,32 @@ class Database:
             await self._db.execute(ddl)
         await self._db.commit()
         logger.info("Database schema created.")
+
+    async def _run_migrations(self) -> None:
+        """Apply lightweight schema migrations for existing databases."""
+        await self._ensure_column(
+            "users",
+            "time_display",
+            "TEXT NOT NULL DEFAULT 'local'",
+        )
+
+    async def _ensure_column(
+        self,
+        table: str,
+        column: str,
+        column_def: str,
+    ) -> None:
+        """Add a column when it does not yet exist."""
+        rows = await self.fetch_all(f"PRAGMA table_info({table})")
+        existing = {row["name"] for row in rows}
+        if column in existing:
+            return
+
+        await self._db.execute(
+            f"ALTER TABLE {table} ADD COLUMN {column} {column_def}"
+        )
+        await self._db.commit()
+        logger.info("Migration applied: added %s.%s", table, column)
 
     async def execute(
         self, sql: str, params: tuple = ()

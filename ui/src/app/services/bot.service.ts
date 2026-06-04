@@ -55,9 +55,9 @@ export class BotService {
   }
 
   delete(id: number, mode = 'stop_cancel'): Observable<void> {
-    return this.http.delete<void>(`${this.url}/${id}`, {
-      body: { mode },
-    });
+    return this.http.delete<void>(
+      `${this.url}/${id}?mode=${encodeURIComponent(mode)}`
+    );
   }
 
   getOrders(id: number): Observable<unknown[]> {

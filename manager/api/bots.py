@@ -33,10 +33,6 @@ class StartBotRequest(BaseModel):
     worker_id: Optional[int] = None
 
 
-class DeleteBotRequest(BaseModel):
-    mode: str = "stop_cancel"
-
-
 @router.get("")
 async def list_bots(
     request: Request,
@@ -121,10 +117,10 @@ async def delete_bot(
     bot_id: int,
     request: Request,
     _user: Annotated[dict, Depends(get_current_user)],
-    body: DeleteBotRequest = DeleteBotRequest(),
+    mode: str = "stop_cancel",
 ):
     """Delete a bot."""
-    await request.app.state.bot_service.delete_bot(bot_id, mode=body.mode)
+    await request.app.state.bot_service.delete_bot(bot_id, mode=mode)
     return {"detail": "Bot deleted."}
 
 

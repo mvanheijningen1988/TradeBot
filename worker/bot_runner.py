@@ -5,6 +5,7 @@ status and logs back to the Manager.
 """
 
 import asyncio
+import contextlib
 import logging
 import uuid
 from typing import Optional
@@ -34,6 +35,8 @@ class BotRunner:
         self._client = client
         self._running = False
         self._task: Optional[asyncio.Task] = None
+        self._cancel_strategy_on_exit = True
+        self._report_stopped_on_exit = True
 
     async def run(self) -> None:
         """Main bot execution loop."""
@@ -109,7 +112,7 @@ class BotRunner:
                 await asyncio.sleep(5)
 
         except asyncio.CancelledError:
-            pass
+            raise
         except Exception as exc:
             logger.exception("Bot %d error: %s", self.bot_id, exc)
             await self._client.send_error(
@@ -119,26 +122,40 @@ class BotRunner:
                 self.bot_id, BOT_STATUS_FAULT
             )
         finally:
-            # Always stop the strategy (cancel orders etc.).
+            # On explicit stop we cancel strategy orders; during worker
+            # shutdown/restart we preserve exchange state for recovery.
             if strategy is not None:
                 try:
-                    await strategy.stop()
+                    if self._cancel_strategy_on_exit:
+                        await strategy.stop()
                 except Exception:
-                    logger.exception("Bot %d strategy stop error.", self.bot_id)
+                    logger.exception(
+                        "Bot %d strategy stop error.",
+                        self.bot_id,
+                    )
             self._running = False
 
-    async def stop(self) -> None:
+    async def stop(
+        self,
+        report_stopped: bool = True,
+        cancel_strategy: bool = True,
+    ) -> None:
         """Stop the bot gracefully."""
+        self._report_stopped_on_exit = report_stopped
+        self._cancel_strategy_on_exit = cancel_strategy
         self._running = False
         if self._task and not self._task.done():
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
-        await self._client.send_bot_status(
-            self.bot_id, BOT_STATUS_STOPPED
-        )
+        if self._report_stopped_on_exit:
+            await self._client.send_bot_status(
+                self.bot_id, BOT_STATUS_STOPPED
+            )
+
+    def attach_task(self, task: asyncio.Task) -> None:
+        """Attach the runner task so stop() can cancel and await it."""
+        self._task = task
 
     async def _create_strategy(self):
         """Instantiate the strategy from config.

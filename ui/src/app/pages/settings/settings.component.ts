@@ -15,15 +15,20 @@ import { DropdownComponent, DropdownOption } from '../../shared/dropdown/dropdow
   styleUrl: './settings.component.scss',
 })
 export class SettingsComponent implements OnInit {
-  private exchangeService = inject(ExchangeService);
-  private auth = inject(AuthService);
-  private http = inject(HttpClient);
+  private readonly exchangeService = inject(ExchangeService);
+  private readonly auth = inject(AuthService);
+  private readonly http = inject(HttpClient);
 
   exchanges: Exchange[] = [];
   language: string | number = 'en';
   languageOptions: DropdownOption[] = [
     { value: 'en', label: 'English' },
     { value: 'nl', label: 'Nederlands' },
+  ];
+  timeDisplay: string | number = 'local';
+  timeDisplayOptions: DropdownOption[] = [
+    { value: 'local', label: 'Local Time' },
+    { value: 'utc', label: 'UTC' },
   ];
 
   newExchange = { name: 'bitvavo', api_key: '', api_secret: '', rate_limit: 1000 };
@@ -34,7 +39,10 @@ export class SettingsComponent implements OnInit {
   ngOnInit(): void {
     this.loadExchanges();
     this.auth.currentUser$.subscribe((u) => {
-      if (u) this.language = u.language;
+      if (u) {
+        this.language = u.language;
+        this.timeDisplay = u.time_display;
+      }
     });
   }
 
@@ -82,6 +90,14 @@ export class SettingsComponent implements OnInit {
   updateLanguage(): void {
     this.http
       .put(`${environment.apiUrl}/settings/language`, { language: this.language })
-      .subscribe();
+      .subscribe(() => this.auth.loadUser());
+  }
+
+  updateTimeDisplay(): void {
+    this.http
+      .put(`${environment.apiUrl}/settings/time-display`, {
+        time_display: this.timeDisplay,
+      })
+      .subscribe(() => this.auth.loadUser());
   }
 }

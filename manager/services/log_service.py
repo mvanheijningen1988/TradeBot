@@ -6,6 +6,7 @@ a DB-backed log store for UI searching and correlation ID tracing.
 
 import logging
 import os
+import asyncio
 from logging.handlers import RotatingFileHandler
 from typing import Optional
 
@@ -13,6 +14,50 @@ from manager.config import Config
 from manager.database.repositories import LogEntryRepository
 
 logger = logging.getLogger(__name__)
+
+
+class _DiagnosticsDbHandler(logging.Handler):
+    """Persist selected log records to diagnostics DB asynchronously."""
+
+    def __init__(self, service: "LogService") -> None:
+        super().__init__()
+        self._service = service
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.name.startswith("manager.services.log_service"):
+            return
+
+        category = self._categorize(record.name)
+        level = record.levelname.upper()
+        if not self._service.should_log(category, level):
+            return
+
+        try:
+            message = record.getMessage()
+        except Exception:
+            return
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        loop.create_task(
+            self._service.persist(
+                category=category,
+                message=message,
+                level=level,
+                subcategory=record.name,
+            )
+        )
+
+    @staticmethod
+    def _categorize(logger_name: str) -> str:
+        if logger_name.startswith("worker"):
+            return "worker"
+        if logger_name.startswith("bot"):
+            return "bot"
+        return "manager"
 
 
 class LogService:
@@ -24,6 +69,7 @@ class LogService:
         self._config = config
         self._repo = log_repo
         self._level_overrides: dict[str, str] = {"*": "INFO"}
+        self._db_handler: Optional[logging.Handler] = None
 
     def setup_logging(self) -> None:
         """Configure root logger with console + rotating file handlers."""
@@ -51,6 +97,16 @@ class LogService:
         )
         file_handler.setFormatter(fmt)
         root.addHandler(file_handler)
+
+    def attach_diagnostics_stream_handler(self) -> None:
+        """Mirror regular logger output into diagnostics DB."""
+        if self._db_handler is not None:
+            return
+
+        root = logging.getLogger()
+        handler = _DiagnosticsDbHandler(self)
+        root.addHandler(handler)
+        self._db_handler = handler
 
     def set_level(self, category: str, level: str) -> None:
         """Change log level for a category without restart."""

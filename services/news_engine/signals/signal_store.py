@@ -41,6 +41,10 @@ class SignalStore:
                 confidence  REAL    NOT NULL,
                 reason      TEXT    NOT NULL DEFAULT '',
                 event_type  TEXT,
+                rsi_short   REAL,
+                rsi_long    REAL,
+                rsi_state   TEXT,
+                investment_horizon TEXT NOT NULL DEFAULT 'unknown',
                 source      TEXT    NOT NULL,
                 article_url TEXT    NOT NULL,
                 timestamp   TEXT    NOT NULL,
@@ -48,7 +52,24 @@ class SignalStore:
             )
             """
         )
+        await self._ensure_column("rsi_short", "REAL")
+        await self._ensure_column("rsi_long", "REAL")
+        await self._ensure_column("rsi_state", "TEXT")
+        await self._ensure_column(
+            "investment_horizon",
+            "TEXT NOT NULL DEFAULT 'unknown'",
+        )
         await self._db.commit()
+
+    async def _ensure_column(self, name: str, column_def: str) -> None:
+        """Add a column to news_signals if it does not exist yet."""
+        rows = await self._db.fetch_all("PRAGMA table_info(news_signals)")
+        existing = {row["name"] for row in rows}
+        if name in existing:
+            return
+        await self._db.execute(
+            f"ALTER TABLE news_signals ADD COLUMN {name} {column_def}"
+        )
 
     async def save_signal(self, signal: NewsSignal) -> None:
         """Save a signal to DB and in-memory cache."""
@@ -62,8 +83,9 @@ class SignalStore:
                 """
                 INSERT INTO news_signals
                     (coin, signal, score, confidence, reason,
-                     event_type, source, article_url, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     event_type, rsi_short, rsi_long, rsi_state,
+                     investment_horizon, source, article_url, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     signal.coin,
@@ -72,6 +94,10 @@ class SignalStore:
                     signal.confidence,
                     signal.reason,
                     signal.event_type,
+                    signal.rsi_short,
+                    signal.rsi_long,
+                    signal.rsi_state,
+                    signal.investment_horizon,
                     signal.source,
                     signal.article_url,
                     signal.timestamp.isoformat(),
@@ -106,8 +132,9 @@ class SignalStore:
                     """
                     INSERT INTO news_signals
                         (coin, signal, score, confidence, reason,
-                         event_type, source, article_url, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         event_type, rsi_short, rsi_long, rsi_state,
+                         investment_horizon, source, article_url, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         signal.coin,
@@ -116,6 +143,10 @@ class SignalStore:
                         signal.confidence,
                         signal.reason,
                         signal.event_type,
+                        signal.rsi_short,
+                        signal.rsi_long,
+                        signal.rsi_state,
+                        signal.investment_horizon,
                         signal.source,
                         signal.article_url,
                         signal.timestamp.isoformat(),
@@ -154,7 +185,8 @@ class SignalStore:
         rows = await self._db.fetch_all(
             """
             SELECT coin, signal, score, confidence, reason,
-                   event_type, source, article_url, timestamp
+                     event_type, rsi_short, rsi_long, rsi_state,
+                     investment_horizon, source, article_url, timestamp
             FROM news_signals
             ORDER BY id DESC
             LIMIT ?
@@ -182,6 +214,10 @@ class SignalStore:
                         "score": signal.score,
                         "confidence": signal.confidence,
                         "reason": signal.reason,
+                        "rsi_short": signal.rsi_short,
+                        "rsi_long": signal.rsi_long,
+                        "rsi_state": signal.rsi_state,
+                        "investment_horizon": signal.investment_horizon,
                         "source": signal.source,
                         "article_url": signal.article_url,
                         "timestamp": signal.timestamp.isoformat(),
@@ -194,6 +230,10 @@ class SignalStore:
                         "score": signal.score,
                         "confidence": signal.confidence,
                         "reason": signal.reason,
+                        "rsi_short": signal.rsi_short,
+                        "rsi_long": signal.rsi_long,
+                        "rsi_state": signal.rsi_state,
+                        "investment_horizon": signal.investment_horizon,
                         "source": signal.source,
                         "article_url": signal.article_url,
                         "timestamp": signal.timestamp.isoformat(),

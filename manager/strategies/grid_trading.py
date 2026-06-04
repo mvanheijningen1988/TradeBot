@@ -16,7 +16,7 @@ from decimal import Decimal, ROUND_DOWN
 from typing import Any, Optional
 
 from manager.exchanges.base import ExchangeClient
-from manager.models import OrderSide, OrderStatus, OrderType
+from manager.models import Order, OrderSide, OrderStatus, OrderType
 from manager.strategies.base import Strategy, StrategyConfig, StrategyState
 
 logger = logging.getLogger(__name__)
@@ -383,6 +383,22 @@ class GridStrategy(Strategy):
             )
             return None
 
+    async def _fetch_order_details(self, order_id: str) -> Optional[Order]:
+        """Fetch full order details from the exchange."""
+        cfg = self._config
+        try:
+            return await self._exchange.get_order(
+                market=cfg.market,
+                order_id=order_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to fetch order details for %s (%s).",
+                order_id,
+                exc,
+            )
+            return None
+
     async def _apply_reconciled_status(
         self,
         side: str,
@@ -455,6 +471,7 @@ class GridStrategy(Strategy):
 
         budget = Decimal(str(cfg.budget_quote))
         investment_per_grid = budget / cfg.num_grids
+        filled_order = await self._fetch_order_details(order_id)
 
         if filled_side == "buy":
             await self._handle_buy_fill(
@@ -462,6 +479,7 @@ class GridStrategy(Strategy):
                 idx=idx,
                 filled_price=filled_price,
                 investment_per_grid=investment_per_grid,
+                filled_order=filled_order,
             )
         else:
             await self._handle_sell_fill(
@@ -469,6 +487,7 @@ class GridStrategy(Strategy):
                 idx=idx,
                 filled_price=filled_price,
                 investment_per_grid=investment_per_grid,
+                filled_order=filled_order,
             )
 
     def _find_tracked_order(
@@ -507,6 +526,7 @@ class GridStrategy(Strategy):
         idx: int,
         filled_price: Decimal,
         investment_per_grid: Decimal,
+        filled_order: Optional[Order],
     ) -> None:
         """Handle post-fill logic for a buy order."""
         cfg = self._config
@@ -519,8 +539,10 @@ class GridStrategy(Strategy):
             return
 
         sell_price = self._grid_prices[idx + 1]
-        amount = (investment_per_grid / sell_price).quantize(
-            Decimal("0.00000001"), rounding=ROUND_DOWN,
+        amount = self._sell_amount_from_fill(
+            filled_order=filled_order,
+            fallback_quote=investment_per_grid,
+            sell_price=sell_price,
         )
         grid_profit = (sell_price - filled_price) * amount
         self._total_profit += grid_profit
@@ -539,6 +561,7 @@ class GridStrategy(Strategy):
         idx: int,
         filled_price: Decimal,
         investment_per_grid: Decimal,
+        filled_order: Optional[Order],
     ) -> None:
         """Handle post-fill logic for a sell order."""
         cfg = self._config
@@ -551,8 +574,10 @@ class GridStrategy(Strategy):
             return
 
         buy_price = self._grid_prices[idx - 1]
-        amount = (investment_per_grid / buy_price).quantize(
-            Decimal("0.00000001"), rounding=ROUND_DOWN,
+        amount = self._buy_amount_from_fill(
+            filled_order=filled_order,
+            fallback_quote=investment_per_grid,
+            buy_price=buy_price,
         )
         if amount <= 0:
             return
@@ -560,6 +585,55 @@ class GridStrategy(Strategy):
         await self._place_order(cfg, OrderSide.BUY, buy_price, amount)
         await self._log(
             f"Counter BUY placed @ {buy_price} (amount={amount})"
+        )
+
+    def _sell_amount_from_fill(
+        self,
+        filled_order: Optional[Order],
+        fallback_quote: Decimal,
+        sell_price: Decimal,
+    ) -> Decimal:
+        """Return sell base amount from the actual buy fill when available."""
+        if filled_order and filled_order.filled_amount:
+            filled_base = Decimal(filled_order.filled_amount)
+            if (
+                filled_order.fee_currency
+                and filled_order.market
+                and filled_order.fee_currency
+                == filled_order.market.split("-")[0]
+            ):
+                filled_base -= Decimal(filled_order.fee_paid or "0")
+            return max(filled_base, Decimal("0")).quantize(
+                Decimal("0.00000001"), rounding=ROUND_DOWN,
+            )
+
+        return (fallback_quote / sell_price).quantize(
+            Decimal("0.00000001"), rounding=ROUND_DOWN,
+        )
+
+    def _buy_amount_from_fill(
+        self,
+        filled_order: Optional[Order],
+        fallback_quote: Decimal,
+        buy_price: Decimal,
+    ) -> Decimal:
+        """Return buy base amount using actual sell proceeds when available."""
+        if filled_order and filled_order.filled_amount_quote:
+            quote_received = Decimal(filled_order.filled_amount_quote)
+            if (
+                filled_order.fee_currency
+                and filled_order.market
+                and filled_order.fee_currency
+                == filled_order.market.split("-")[1]
+            ):
+                quote_received -= Decimal(filled_order.fee_paid or "0")
+            quote_received = max(quote_received, Decimal("0"))
+            return (quote_received / buy_price).quantize(
+                Decimal("0.00000001"), rounding=ROUND_DOWN,
+            )
+
+        return (fallback_quote / buy_price).quantize(
+            Decimal("0.00000001"), rounding=ROUND_DOWN,
         )
 
     # ── exchange reconciliation ─────────────────────────────────

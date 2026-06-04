@@ -8,6 +8,8 @@ import { ExchangeService, Exchange, Balance } from '../../services/exchange.serv
 import { WebSocketService } from '../../services/websocket.service';
 import { WalletService, WalletInfo, WalletTransaction } from '../../services/wallet.service';
 import { DropdownComponent, DropdownOption } from '../../shared/dropdown/dropdown.component';
+import { AppDateTimePipe } from '../../shared/pipes/app-datetime.pipe';
+import { DateTimeService } from '../../core/date-time.service';
 
 interface BudgetPoint {
   timestamp: string;
@@ -23,7 +25,13 @@ interface GridLevel {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterModule, FormsModule, DropdownComponent],
+  imports: [
+    CommonModule,
+    RouterModule,
+    FormsModule,
+    DropdownComponent,
+    AppDateTimePipe,
+  ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
 })
@@ -32,6 +40,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private readonly exchangeService = inject(ExchangeService);
   private readonly wsService = inject(WebSocketService);
   private readonly walletService = inject(WalletService);
+  private readonly dateTimeService = inject(DateTimeService);
   private wsSub?: Subscription;
 
   @ViewChild('budgetChart') budgetChartRef!: ElementRef<HTMLCanvasElement>;
@@ -39,6 +48,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   bots: Bot[] = [];
   exchanges: Exchange[] = [];
   exchangeBalances: { [key: number]: Balance[] } = {};
+  exchangeBalanceErrors: { [key: number]: string } = {};
 
   // Wallet
   wallets: { [key: number]: WalletInfo } = {};
@@ -75,6 +85,28 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // Grid modal
   gridModalBot: Bot | null = null;
   gridLevels: GridLevel[] = [];
+  modalOffsetX = 0;
+  modalOffsetY = 0;
+  isModalDragging = false;
+  private dragOriginX = 0;
+  private dragOriginY = 0;
+
+  private readonly onModalDragMove = (event: MouseEvent): void => {
+    if (!this.isModalDragging) {
+      return;
+    }
+    this.modalOffsetX = event.clientX - this.dragOriginX;
+    this.modalOffsetY = event.clientY - this.dragOriginY;
+  };
+
+  private readonly onModalDragEnd = (): void => {
+    if (!this.isModalDragging) {
+      return;
+    }
+    this.isModalDragging = false;
+    globalThis.removeEventListener('mousemove', this.onModalDragMove);
+    globalThis.removeEventListener('mouseup', this.onModalDragEnd);
+  };
 
   get faultBots(): Bot[] {
     return this.bots.filter((b) => b.status === 'fault');
@@ -92,7 +124,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.onModalDragEnd();
     this.wsSub?.unsubscribe();
+  }
+
+  startModalDrag(event: MouseEvent): void {
+    if (event.button !== 0) {
+      return;
+    }
+    this.isModalDragging = true;
+    this.dragOriginX = event.clientX - this.modalOffsetX;
+    this.dragOriginY = event.clientY - this.modalOffsetY;
+    globalThis.addEventListener('mousemove', this.onModalDragMove);
+    globalThis.addEventListener('mouseup', this.onModalDragEnd);
   }
 
   private handleWsMessage(msg: Record<string, unknown>): void {
@@ -161,8 +205,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.exchangeService.list().subscribe((exs) => {
       this.exchanges = exs;
       for (const ex of exs) {
-        this.exchangeService.getBalances(ex.id).subscribe((bals) => {
-          this.exchangeBalances[ex.id] = bals;
+        this.exchangeService.getBalances(ex.id).subscribe({
+          next: (bals) => {
+            this.exchangeBalances[ex.id] = bals;
+            this.exchangeBalanceErrors[ex.id] = '';
+          },
+          error: (err) => {
+            this.exchangeBalances[ex.id] = [];
+            const detail = err?.error?.detail as string | undefined;
+            this.exchangeBalanceErrors[ex.id] =
+              detail || 'Failed to load balances for this exchange.';
+          },
         });
         this.loadWallet(ex.id);
       }
@@ -469,7 +522,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         x: closest.x / scaleX + 12,
         y: closest.y / scaleY - 30,
         balance: closest.data.balance.toFixed(2),
-        time: date.toLocaleString(),
+        time: this.dateTimeService.formatDateTime(date),
       };
     } else {
       this.chartTooltip.visible = false;
@@ -487,6 +540,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   getBalances(exchangeId: number): Balance[] {
     return this.exchangeBalances[exchangeId] || [];
+  }
+
+  getBalanceError(exchangeId: number): string {
+    return this.exchangeBalanceErrors[exchangeId] || '';
   }
 
   startBot(bot: Bot): void {
@@ -518,6 +575,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   showGrid(bot: Bot): void {
+    this.modalOffsetX = 0;
+    this.modalOffsetY = 0;
+    this.isModalDragging = false;
     this.gridModalBot = bot;
     const params = bot.strategy_params || {};
     const upper = Number(params['upper_price'] || 0);

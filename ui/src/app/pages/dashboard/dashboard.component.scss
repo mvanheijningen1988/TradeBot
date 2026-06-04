@@ -160,12 +160,25 @@ canvas {
 .modal-backdrop {
   position: fixed;
   inset: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  max-height: none;
   z-index: 9000;
   display: flex;
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(4px);
+  color: var(--text-primary);
+  overflow: visible;
+
+  &::backdrop {
+    background: transparent;
+  }
 }
 
 .modal-dialog {
@@ -178,6 +191,17 @@ canvas {
   border: 1px solid var(--border-color);
   border-radius: 10px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 170, 255, 0.06);
+  color: var(--text-primary);
+  transition: transform 0.03s linear;
+
+  th,
+  td {
+    color: inherit;
+  }
+
+  &.dragging {
+    user-select: none;
+  }
 }
 
 .modal-header {
@@ -186,6 +210,12 @@ canvas {
   justify-content: space-between;
   padding: 18px 24px;
   border-bottom: 1px solid var(--border-color);
+  cursor: grab;
+  user-select: none;
+
+  .modal-dialog.dragging & {
+    cursor: grabbing;
+  }
 }
 
 .modal-title {

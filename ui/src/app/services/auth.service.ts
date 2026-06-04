@@ -8,15 +8,20 @@ export interface User {
   username: string;
   role: string;
   language: string;
+  time_display: string;
 }
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private http = inject(HttpClient);
-  private user$ = new BehaviorSubject<User | null>(null);
+  private readonly http = inject(HttpClient);
+  private readonly user$ = new BehaviorSubject<User | null>(null);
 
   get currentUser$(): Observable<User | null> {
     return this.user$.asObservable();
+  }
+
+  get currentUserValue(): User | null {
+    return this.user$.value;
   }
 
   isAuthenticated(): boolean {

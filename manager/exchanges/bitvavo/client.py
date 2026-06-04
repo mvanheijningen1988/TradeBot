@@ -6,13 +6,13 @@ rate-limit tracking per call.
 """
 
 import asyncio
+import contextlib
 import hashlib
 import hmac
 import json
 import logging
 import time
-import uuid
-from typing import Any, Callable, Coroutine, Optional
+from typing import Any, Callable, Optional
 
 import websockets
 from websockets.asyncio.client import ClientConnection
@@ -66,8 +66,10 @@ class BitvavoClient(ExchangeClient):
 
         # Subscription callbacks: channel -> {market -> callback}
         self._subscriptions: dict[str, dict[str, Callable]] = {}
+        self._background_tasks: set[asyncio.Task] = set()
 
         self._recv_task: Optional[asyncio.Task] = None
+        self._reconnect_lock = asyncio.Lock()
 
     # ── Connection lifecycle ─────────────────────────────────────
 
@@ -82,10 +84,8 @@ class BitvavoClient(ExchangeClient):
         """Close the WebSocket connection gracefully."""
         if self._recv_task:
             self._recv_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._recv_task
-            except asyncio.CancelledError:
-                pass
             self._recv_task = None
 
         if self._ws:
@@ -94,6 +94,25 @@ class BitvavoClient(ExchangeClient):
 
         self._authenticated = False
         logger.info("Disconnected from Bitvavo WebSocket.")
+
+    def _fail_pending_requests(self, exc: Exception) -> None:
+        """Fail and clear all pending request futures."""
+        for future in self._pending.values():
+            if not future.done():
+                future.set_exception(exc)
+        self._pending.clear()
+
+    async def reconnect(self) -> None:
+        """Reconnect and re-authenticate the websocket session."""
+        async with self._reconnect_lock:
+            # Another coroutine may already have reconnected while this one
+            # waited for the lock.
+            if self._ws is not None and self._authenticated:
+                return
+
+            await self.disconnect()
+            await self.connect()
+            await self.authenticate()
 
     async def authenticate(self) -> None:
         """Authenticate the WebSocket connection with HMAC-SHA256."""
@@ -150,38 +169,61 @@ class BitvavoClient(ExchangeClient):
         Returns:
             The parsed JSON response dict.
         """
-        if self._ws is None:
-            raise ConnectionError("WebSocket is not connected.")
+        for attempt in range(2):
+            if self._ws is None:
+                await self.connect()
 
-        if rate_limit:
-            await self._rate_limiter.acquire(action, has_market)
+            # Authenticate lazily for private actions, but avoid recursion
+            # while sending the authenticate action itself.
+            if action != "authenticate" and not self._authenticated:
+                await self.authenticate()
 
-        request_id = self._next_request_id()
-        body["action"] = action
-        body["requestId"] = request_id
+            if rate_limit:
+                await self._rate_limiter.acquire(action, has_market)
 
-        future: asyncio.Future = asyncio.get_event_loop().create_future()
-        self._pending[request_id] = future
+            request_id = self._next_request_id()
+            payload = dict(body)
+            payload["action"] = action
+            payload["requestId"] = request_id
 
-        message = json.dumps(body)
-        logger.debug("WS SEND [%d]: %s", request_id, action)
-        await self._ws.send(message)
+            future: asyncio.Future = asyncio.get_event_loop().create_future()
+            self._pending[request_id] = future
 
-        try:
-            response = await asyncio.wait_for(future, timeout=30.0)
-        except asyncio.TimeoutError:
-            self._pending.pop(request_id, None)
-            raise TimeoutError(
-                f"Bitvavo request {action} (id={request_id}) timed out."
-            )
+            message = json.dumps(payload)
+            logger.debug("WS SEND [%d]: %s", request_id, action)
 
-        if "errorCode" in response:
-            raise RuntimeError(
-                f"Bitvavo error {response['errorCode']}: "
-                f"{response.get('error', 'unknown')}"
-            )
+            try:
+                await self._ws.send(message)
+                response = await asyncio.wait_for(future, timeout=30.0)
+            except websockets.ConnectionClosed as exc:
+                self._pending.pop(request_id, None)
+                if attempt == 0:
+                    logger.warning(
+                        "Bitvavo WS disconnected during %s; reconnecting.",
+                        action,
+                    )
+                    self._ws = None
+                    self._authenticated = False
+                    await self.reconnect()
+                    continue
+                raise ConnectionError(
+                    f"Bitvavo websocket disconnected during {action}: {exc}"
+                ) from exc
+            except asyncio.TimeoutError:
+                self._pending.pop(request_id, None)
+                raise TimeoutError(
+                    f"Bitvavo request {action} (id={request_id}) timed out."
+                )
 
-        return response
+            if "errorCode" in response:
+                raise RuntimeError(
+                    f"Bitvavo error {response['errorCode']}: "
+                    f"{response.get('error', 'unknown')}"
+                )
+
+            return response
+
+        raise ConnectionError(f"Failed to execute Bitvavo action {action}.")
 
     async def _receive_loop(self) -> None:
         """Background task that dispatches incoming WebSocket messages."""
@@ -189,8 +231,11 @@ class BitvavoClient(ExchangeClient):
             async for raw in self._ws:
                 data = json.loads(raw)
                 self._dispatch(data)
-        except websockets.ConnectionClosed:
-            logger.warning("Bitvavo WebSocket connection closed.")
+        except websockets.ConnectionClosed as exc:
+            logger.warning("Bitvavo WebSocket connection closed: %s", exc)
+            self._ws = None
+            self._authenticated = False
+            self._fail_pending_requests(exc)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -210,11 +255,14 @@ class BitvavoClient(ExchangeClient):
         action = data.get("action")
         if action == "authenticate":
             # Resolve the pending authenticate future if any.
-            for rid, fut in list(self._pending.items()):
+            rid_to_pop: Optional[int] = None
+            for rid, fut in self._pending.items():
                 if not fut.done():
                     fut.set_result(data)
-                    self._pending.pop(rid, None)
+                    rid_to_pop = rid
                     break
+            if rid_to_pop is not None:
+                self._pending.pop(rid_to_pop, None)
             return
 
         # Subscription event.
@@ -224,7 +272,9 @@ class BitvavoClient(ExchangeClient):
             cbs = self._subscriptions.get("ticker", {})
             cb = cbs.get(market)
             if cb:
-                asyncio.ensure_future(self._safe_callback(cb, data))
+                task = asyncio.create_task(self._safe_callback(cb, data))
+                self._background_tasks.add(task)
+                task.add_done_callback(self._background_tasks.discard)
             return
 
         logger.debug("Unhandled message: %s", data)

@@ -25,6 +25,14 @@ class SentimentLabel(str, Enum):
     BEARISH = "bearish"
 
 
+class RSIState(str, Enum):
+    """RSI state buckets used for signal interpretation."""
+
+    OVERBOUGHT = "overbought"
+    OVERSOLD = "oversold"
+    NEUTRAL = "neutral"
+
+
 class Article(BaseModel):
     """Raw article collected from an RSS feed."""
 
@@ -87,6 +95,10 @@ class NewsSignal(BaseModel):
     article_url: str
     timestamp: datetime
     event_type: Optional[str] = None
+    rsi_short: Optional[float] = None
+    rsi_long: Optional[float] = None
+    rsi_state: Optional[str] = None
+    investment_horizon: str = "unknown"
 
     class Config:
         from_attributes = True

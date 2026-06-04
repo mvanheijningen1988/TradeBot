@@ -75,14 +75,28 @@
     <button class="btn btn-primary" (click)="addExchange()">Add Exchange</button>
   </div>
 
-  <!-- Language -->
+  <!-- User Preferences -->
   <div class="card">
-    <h2 class="mono text-blue" style="margin-bottom: 16px">Language</h2>
-    <app-dropdown
-      [options]="languageOptions"
-      [(value)]="language"
-      (valueChange)="updateLanguage()"
-      style="width: 200px; display: block">
-    </app-dropdown>
+    <h2 class="mono text-blue" style="margin-bottom: 16px">User Preferences</h2>
+
+    <div class="form-group" style="max-width: 260px; margin-bottom: 16px">
+      <label class="form-label">Language</label>
+      <app-dropdown
+        [options]="languageOptions"
+        [(value)]="language"
+        (valueChange)="updateLanguage()"
+        style="width: 100%; display: block">
+      </app-dropdown>
+    </div>
+
+    <div class="form-group" style="max-width: 260px; margin-bottom: 0">
+      <label class="form-label">Date/Time Display</label>
+      <app-dropdown
+        [options]="timeDisplayOptions"
+        [(value)]="timeDisplay"
+        (valueChange)="updateTimeDisplay()"
+        style="width: 100%; display: block">
+      </app-dropdown>
+    </div>
   </div>
 </div>

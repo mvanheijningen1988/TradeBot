@@ -73,6 +73,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Services.
     log_service = LogService(config, log_repo)
     log_service.setup_logging()
+    log_service.attach_diagnostics_stream_handler()
     app.state.log_service = log_service
 
     auth_service = AuthService(config, user_repo)

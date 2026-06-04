@@ -13,6 +13,7 @@ TABLES: list[str] = [
         password_hash TEXT  NOT NULL,
         role        TEXT    NOT NULL DEFAULT 'user',
         language    TEXT    NOT NULL DEFAULT 'en',
+        time_display TEXT   NOT NULL DEFAULT 'local',
         created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
         updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
     )

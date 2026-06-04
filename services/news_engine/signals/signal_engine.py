@@ -56,6 +56,7 @@ class SignalEngine:
         coins: list[str],
         sentiment: SentimentResult,
         events: EventDetectionResult,
+        rsi_context: dict[str, dict] | None = None,
     ) -> list[NewsSignal]:
         """Generate one signal per detected coin.
 
@@ -98,9 +99,14 @@ class SignalEngine:
         primary_event = (
             events.events[0].event_type if events.events else None
         )
+        rsi_context = rsi_context or {}
 
         signals: list[NewsSignal] = []
         for coin in coins:
+            coin_rsi = rsi_context.get(coin, {})
+            rsi_short = coin_rsi.get("rsi_short")
+            rsi_long = coin_rsi.get("rsi_long")
+
             sig = NewsSignal(
                 coin=coin,
                 signal=signal_label,
@@ -111,6 +117,14 @@ class SignalEngine:
                 article_url=article.url,
                 timestamp=article.timestamp,
                 event_type=primary_event,
+                rsi_short=rsi_short,
+                rsi_long=rsi_long,
+                rsi_state=coin_rsi.get("rsi_state"),
+                investment_horizon=self._derive_horizon(
+                    signal_score=signal_score,
+                    rsi_short=rsi_short,
+                    rsi_long=rsi_long,
+                ),
             )
             signals.append(sig)
             logger.info(
@@ -125,3 +139,37 @@ class SignalEngine:
             )
 
         return signals
+
+    @staticmethod
+    def _derive_horizon(
+        signal_score: float,
+        rsi_short: float | None,
+        rsi_long: float | None,
+    ) -> str:
+        """Classify whether setup looks better for long or short horizon."""
+        long_term = (
+            rsi_long is not None
+            and rsi_long <= 35
+            and signal_score > 0
+        )
+        short_term = (
+            rsi_short is not None
+            and (
+                (rsi_short <= 30 and signal_score > 0)
+                or (40 <= rsi_short <= 60 and abs(signal_score) >= 2)
+            )
+        )
+        avoid = (
+            (rsi_short is not None and rsi_short >= 70 and signal_score < 0)
+            or (rsi_long is not None and rsi_long >= 70 and signal_score < 0)
+        )
+
+        if long_term and short_term:
+            return "both"
+        if long_term:
+            return "long_term"
+        if short_term:
+            return "short_term"
+        if avoid:
+            return "avoid"
+        return "unknown"

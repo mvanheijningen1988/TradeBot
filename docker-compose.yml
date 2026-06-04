@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   manager:
     build:
@@ -15,7 +13,7 @@ services:
     environment:
       - TRADEBOT_DB_PATH=/app/data/tradebot.db
       - TRADEBOT_LOG_DIR=/app/logs
-      - TRADEBOT_JWT_SECRET=${JWT_SECRET:-}
+      - TRADEBOT_JWT_SECRET=${JWT_SECRET:-tradebot-dev-secret-change-me}
       - NEWS_ENGINE_USE_FINBERT=${ENABLE_FINBERT:-0}
     restart: unless-stopped
 

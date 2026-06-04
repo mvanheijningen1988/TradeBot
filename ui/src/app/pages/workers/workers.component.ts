@@ -5,19 +5,20 @@ import { WorkerService, Worker } from '../../services/worker.service';
 import { BotService, Bot } from '../../services/bot.service';
 import { WebSocketService } from '../../services/websocket.service';
 import { DiagnosticsService, LogEntry } from '../../services/diagnostics.service';
+import { AppDateTimePipe } from '../../shared/pipes/app-datetime.pipe';
 
 @Component({
   selector: 'app-workers',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, AppDateTimePipe],
   templateUrl: './workers.component.html',
   styleUrl: './workers.component.scss',
 })
 export class WorkersComponent implements OnInit, OnDestroy {
-  private workerService = inject(WorkerService);
-  private botService = inject(BotService);
-  private wsService = inject(WebSocketService);
-  private diagService = inject(DiagnosticsService);
+  private readonly workerService = inject(WorkerService);
+  private readonly botService = inject(BotService);
+  private readonly wsService = inject(WebSocketService);
+  private readonly diagService = inject(DiagnosticsService);
   private wsSub?: Subscription;
 
   @ViewChild('logContainer') logContainer?: ElementRef<HTMLDivElement>;
@@ -47,7 +48,7 @@ export class WorkersComponent implements OnInit, OnDestroy {
             correlation_id: (msg['correlation_id'] as string) || null,
             bot_id: (msg['bot_id'] as number) || null,
             worker_id: wid ?? null,
-            timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+            timestamp: new Date().toISOString(),
           });
           this.scrollLogsToBottom();
         }
@@ -88,7 +89,9 @@ export class WorkersComponent implements OnInit, OnDestroy {
     this.diagService
       .getLogs({ worker_id: w.id, limit: 200 })
       .subscribe((logs) => {
-        this.workerLogs = logs.reverse();
+        const orderedLogs = [...logs];
+        orderedLogs.reverse();
+        this.workerLogs = orderedLogs;
         this.scrollLogsToBottom();
       });
   }
