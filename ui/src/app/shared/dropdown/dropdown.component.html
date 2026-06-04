@@ -1,0 +1,42 @@
+<div class="dropdown" [class.open]="isOpen" [class.dropdown-sm]="size === 'sm'">
+  <button class="dropdown-trigger form-input" (click)="toggle()" type="button">
+    <span class="dropdown-value" [class.text-muted]="!selectedOption">
+      @if (selectedOption?.icon) {
+        <img [src]="selectedOption!.icon" class="dropdown-icon" alt="" loading="lazy">
+      }
+      {{ selectedOption?.label || placeholder }}
+    </span>
+    <span class="dropdown-arrow">▾</span>
+  </button>
+  @if (isOpen) {
+    <div class="dropdown-menu">
+      @if (searchable) {
+        <input class="dropdown-search form-input"
+               [value]="searchTerm"
+               (input)="onSearch($event)"
+               (click)="$event.stopPropagation()"
+               placeholder="Search...">
+      }
+      <div class="dropdown-items" (scroll)="onScroll($event)">
+        @if (scrollOffset > 0) {
+          <div [style.height.px]="scrollOffset * itemHeight"></div>
+        }
+        @for (opt of visibleOptions; track opt.value) {
+          <div class="dropdown-item"
+               [class.selected]="opt.value === value"
+               (click)="select(opt); $event.stopPropagation()">
+            @if (opt.icon) {
+              <img [src]="opt.icon" class="dropdown-icon" alt="" loading="lazy">
+            }
+            {{ opt.label }}
+          </div>
+        } @empty {
+          <div class="dropdown-item text-muted">No results</div>
+        }
+        @if (scrollOffset + maxVisible < filteredOptions.length) {
+          <div [style.height.px]="(filteredOptions.length - scrollOffset - maxVisible) * itemHeight"></div>
+        }
+      </div>
+    </div>
+  }
+</div>

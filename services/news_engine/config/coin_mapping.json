@@ -1,0 +1,32 @@
+{
+  "coins": {
+    "Bitcoin": "BTC",
+    "Ethereum": "ETH",
+    "Solana": "SOL",
+    "Chainlink": "LINK",
+    "Cardano": "ADA",
+    "Polkadot": "DOT",
+    "Avalanche": "AVAX",
+    "Polygon": "MATIC",
+    "Litecoin": "LTC",
+    "Ripple": "XRP",
+    "Dogecoin": "DOGE",
+    "Shiba Inu": "SHIB",
+    "Uniswap": "UNI",
+    "Aave": "AAVE",
+    "Cosmos": "ATOM",
+    "Toncoin": "TON",
+    "Tron": "TRX",
+    "Stellar": "XLM",
+    "Hedera": "HBAR",
+    "Aptos": "APT",
+    "Sui": "SUI",
+    "Arbitrum": "ARB",
+    "Optimism": "OP",
+    "Render": "RNDR",
+    "Filecoin": "FIL",
+    "Injective": "INJ",
+    "Pepe": "PEPE"
+  },
+  "ambiguous_symbols": ["ONE", "NEAR", "SAND", "LINK", "DOT", "ATOM", "OP", "SUI", "APT"]
+}

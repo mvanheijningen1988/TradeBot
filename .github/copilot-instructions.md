@@ -99,7 +99,7 @@ All nodes run in Docker containers for consistency across environments.
 9. **WebSocket Connection Interruption During Critical Operation**
   1. Log the interruption.
   2. Attempt to reconnect.
-  3. Retry the operation if it is safe to do so.
+  3. Retry the operation.
   4. If reconnection fails after 3 attempts:
     - Log the failure.
     - Notify the user.
@@ -118,7 +118,7 @@ All nodes run in Docker containers for consistency across environments.
 - Prefix private members with `_`
 - English for code and docs
 - Clear docstrings and inline comments
-- Functions should be modular and concise (max 50 lines)
+- Functions must not exceed 50 lines of executable code, excluding blank lines, comments, and docstrings.
 - No more than 3 levels of nesting
 - Use constants for hardcoded values.
 - Use __init__.py to define package structure and imports
@@ -133,8 +133,8 @@ All nodes run in Docker containers for consistency across environments.
 ### Linters & Formatters
 
 - Run `flake8`, `black`, `isort` on every submission
-- If all fail, halt process and notify with troubleshooting steps
 - Use `black` formatting as source of truth
+- Fix linting errors before merging; no warnings and errors allowed in main branch
 - Record config changes in `CHANGELOG.md`
 
 ### Logging

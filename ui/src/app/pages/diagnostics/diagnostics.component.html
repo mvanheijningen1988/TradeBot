@@ -1,0 +1,138 @@
+<div class="page-content">
+  <div class="page-header">
+    <h1>Diagnostics</h1>
+  </div>
+
+  <!-- System Stats -->
+  <div class="card" style="margin-bottom: 24px">
+    <h2 class="mono text-blue" style="margin-bottom: 16px">System</h2>
+    @if (stats) {
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px">
+        <div>
+          <div class="form-label">CPU</div>
+          <div class="mono text-green" style="font-size: 24px">
+            {{ stats.cpu_percent !== null ? stats.cpu_percent + '%' : 'N/A' }}
+          </div>
+        </div>
+        <div>
+          <div class="form-label">Memory</div>
+          <div class="mono text-green" style="font-size: 24px">
+            {{ stats.memory_percent !== null ? stats.memory_percent + '%' : 'N/A' }}
+          </div>
+        </div>
+        <div>
+          <div class="form-label">Platform</div>
+          <div class="mono text-muted">{{ stats.platform }}</div>
+        </div>
+        <div>
+          <div class="form-label">Python</div>
+          <div class="mono text-muted">{{ stats.python }}</div>
+        </div>
+      </div>
+    }
+  </div>
+
+  <!-- Log Filters -->
+  <div class="card" style="margin-bottom: 24px">
+    <h2 class="mono text-blue" style="margin-bottom: 16px">Logs</h2>
+    <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: flex-end">
+      <div class="form-group" style="margin-bottom: 0">
+        <label class="form-label">Category</label>
+        <input class="form-input" style="width: 160px"
+               [(ngModel)]="filterCategory" placeholder="Category">
+      </div>
+      <div class="form-group" style="margin-bottom: 0">
+        <label class="form-label">Correlation ID</label>
+        <input class="form-input" style="width: 200px"
+               [(ngModel)]="filterCorrelationId" placeholder="Correlation ID">
+      </div>
+      <div class="form-group" style="margin-bottom: 0">
+        <label class="form-label">Bot ID</label>
+        <input class="form-input" style="width: 80px" type="number"
+               [(ngModel)]="filterBotId" placeholder="All">
+      </div>
+      <div class="form-group" style="margin-bottom: 0">
+        <label class="form-label">Level</label>
+        <app-dropdown
+          [options]="logLevelFilterOptions"
+          [(value)]="filterLevel"
+          placeholder="All levels"
+          size="sm"
+          style="width: 140px; display: block">
+        </app-dropdown>
+      </div>
+      <button class="btn btn-primary btn-sm" (click)="searchLogs()">Search</button>
+    </div>
+
+    <div class="log-container">
+      @for (log of logs; track log.id) {
+        <div class="log-line" [class]="'log-' + log.level.toLowerCase()">
+          <span class="text-muted">{{ log.timestamp | appDateTime }}</span>
+          <span class="log-level">[{{ log.level }}]</span>
+          <span class="text-blue">{{ log.category }}</span>
+          @if (log.correlation_id) {
+            <span class="text-purple">[{{ log.correlation_id }}]</span>
+          }
+          {{ log.message }}
+        </div>
+      } @empty {
+        <div class="text-muted" style="padding: 12px">No log entries found.</div>
+      }
+    </div>
+  </div>
+
+  <!-- Log Level Control -->
+  <div class="card">
+    <h2 class="mono text-blue" style="margin-bottom: 16px">Log Level Control</h2>
+
+    <!-- Active rules -->
+    @if (logLevelRules.length) {
+      <table class="table" style="margin-bottom: 16px">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Level</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (rule of logLevelRules; track rule.category) {
+            <tr>
+              <td class="mono">{{ rule.category }}</td>
+              <td>
+                <span class="badge" [class]="'badge-level-' + rule.level.toLowerCase()">{{ rule.level }}</span>
+              </td>
+              <td>
+                @if (rule.category !== '*') {
+                  <button class="btn btn-sm btn-danger" (click)="removeLogLevel(rule.category)">Remove</button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    } @else {
+      <div class="text-muted mono" style="margin-bottom: 16px; font-size: 12px">No log level rules configured.</div>
+    }
+
+    <!-- Add rule -->
+    <div style="display: flex; gap: 12px; align-items: flex-end">
+      <div class="form-group" style="margin-bottom: 0">
+        <label class="form-label">Category</label>
+        <input class="form-input" style="width: 200px"
+               [(ngModel)]="levelCategory" placeholder="* (all)">
+      </div>
+      <div class="form-group" style="margin-bottom: 0">
+        <label class="form-label">Level</label>
+        <app-dropdown
+          [options]="logLevelOptions"
+          [(value)]="levelValue"
+          placeholder="Select level"
+          size="sm"
+          style="width: 140px; display: block">
+        </app-dropdown>
+      </div>
+      <button class="btn btn-primary btn-sm" (click)="setLogLevel()">Apply</button>
+    </div>
+  </div>
+</div>

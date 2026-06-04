@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tradebot"
+version = "0.2.0"
+description = "Modular automated crypto trading platform"
+requires-python = ">=3.11"
+dependencies = [
+    "websockets>=13.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "aiosqlite>=0.20",
+    "pyjwt>=2.9",
+    "passlib[bcrypt]>=1.7",
+    "bcrypt>=4.0,<5",
+    "python-multipart>=0.0.9",
+    "httpx>=0.27",
+    "aiohttp>=3.9",
+    "feedparser>=6.0",
+    "vaderSentiment>=3.3",
+]
+
+[project.optional-dependencies]
+finbert = [
+    "transformers>=4.36",
+    "torch>=2.1",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "black",
+    "flake8",
+    "isort",
+    "httpx>=0.27",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["manager*", "worker*", "shared*", "services*"]
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"

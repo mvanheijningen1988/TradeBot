@@ -1,0 +1,251 @@
+<div class="modal-backdrop" (click)="onBackdropClick($event)">
+  <div class="modal-dialog" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2 class="modal-title mono"><span class="text-blue">Create</span> Bot</h2>
+      <button class="modal-close" (click)="onCancel()" title="Close">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input class="form-input" [(ngModel)]="form.name" placeholder="My Grid Bot">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Exchange</label>
+      <app-dropdown
+        [options]="exchangeOptions"
+        [(value)]="form.exchange_id"
+        (valueChange)="onExchangeChange()"
+        placeholder="Select exchange...">
+      </app-dropdown>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Market</label>
+      <app-dropdown
+        [options]="marketOptions"
+        [(value)]="form.market"
+        (valueChange)="onMarketChange()"
+        placeholder="Select market..."
+        [searchable]="true">
+      </app-dropdown>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Strategy
+        <span class="info-tip" data-tip="The trading algorithm the bot will execute. Grid Trading places buy and sell orders at preset intervals within a price range. DCA buys at regular time intervals regardless of price. Martingale increases position size after losses to recover on a reversal.">
+          <i class="fa-solid fa-circle-info"></i>
+        </span>
+      </label>
+      <app-dropdown
+        [options]="strategyOptions"
+        [(value)]="form.strategy"
+        placeholder="Select strategy...">
+      </app-dropdown>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Budget (quote currency)
+        <span class="info-tip" data-tip="The total amount of quote currency (e.g. EUR) the bot is allowed to use for trading. This budget is tracked by the manager to prevent over-allocation across bots.">
+          <i class="fa-solid fa-circle-info"></i>
+        </span>
+      </label>
+      <input class="form-input" type="number" [(ngModel)]="form.budget_quote" min="0" step="0.01">
+      @if (budgetLoading) {
+        <div class="budget-hint mono text-muted">Loading balance...</div>
+      }
+      @if (budgetInfo && !budgetLoading) {
+        <div class="budget-hint mono">
+          <span class="text-muted">Exchange:</span>
+          <span class="text-blue">{{ budgetInfo.exchange_total }} {{ budgetInfo.quote }}</span>
+          <span class="text-muted">&nbsp;·&nbsp;Allocated:</span>
+          <span class="text-yellow">{{ budgetInfo.allocated }} {{ budgetInfo.quote }}</span>
+          <span class="text-muted">&nbsp;·&nbsp;Free:</span>
+          <span [class.text-green]="budgetInfo.free > 0" [class.text-red]="budgetInfo.free === 0">{{ budgetInfo.free }} {{ budgetInfo.quote }}</span>
+        </div>
+      }
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Profit Mode
+        <span class="info-tip" data-tip="How profits are handled. Withdraw: profits are moved out of the bot's budget. Compound: profits are reinvested to grow the position. Skim: a percentage of profits is withdrawn and the rest is reinvested.">
+          <i class="fa-solid fa-circle-info"></i>
+        </span>
+      </label>
+      <app-dropdown
+        [options]="profitModeOptions"
+        [(value)]="form.profit_mode"
+        placeholder="Select profit mode...">
+      </app-dropdown>
+    </div>
+
+    @if (form.profit_mode === 'skim') {
+      <div class="form-group">
+        <label class="form-label">Skim Percentage (%)</label>
+        <input class="form-input" type="number" [(ngModel)]="form.profit_skim_pct" min="0" max="100" step="1">
+      </div>
+    }
+
+    <hr style="border-color: var(--border-color); margin: 20px 0">
+    <h3 class="mono text-blue" style="margin-bottom: 16px">Strategy Parameters</h3>
+
+    <!-- Exchange fees -->
+    @if (fees && !feesLoading) {
+      <div class="fee-info mono">
+        <span class="text-muted">Maker Fee:</span>
+        <span class="text-green">{{ (fees.maker * 100).toFixed(2) }}%</span>
+        <span class="text-muted">&nbsp;·&nbsp;Taker Fee:</span>
+        <span class="text-yellow">{{ (fees.taker * 100).toFixed(2) }}%</span>
+      </div>
+    }
+    @if (feesLoading) {
+      <div class="fee-info mono text-muted">Loading fees...</div>
+    }
+
+    @if (form.strategy === 'grid_trading') {
+      <div class="form-group">
+        <label class="form-label">Upper Price
+          <span class="info-tip" data-tip="The highest price in the grid range. The bot will place sell orders up to this level. Set this above the current market price to capture upward movements.">
+            <i class="fa-solid fa-circle-info"></i>
+          </span>
+        </label>
+        <input class="form-input" type="number" [(ngModel)]="params.upper_price" step="0.01">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Lower Price
+          <span class="info-tip" data-tip="The lowest price in the grid range. The bot will place buy orders down to this level. Set this below the current market price to capture downward movements.">
+            <i class="fa-solid fa-circle-info"></i>
+          </span>
+        </label>
+        <input class="form-input" type="number" [(ngModel)]="params.lower_price" step="0.01">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Number of Grids
+          <span class="info-tip" data-tip="How many grid levels to create between the upper and lower price. More grids means smaller price gaps and more frequent trades, but each order uses less budget. Fewer grids means larger gaps and bigger individual trades.">
+            <i class="fa-solid fa-circle-info"></i>
+          </span>
+        </label>
+        <input class="form-input" type="number" [(ngModel)]="params.num_grids" min="2">
+      </div>
+
+      <!-- Grid analysis -->
+      @if (gridAnalysis) {
+        <div class="grid-analysis">
+          <h4 class="mono text-muted" style="margin-bottom: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px">Grid Analysis</h4>
+          <div class="grid-analysis-rows">
+            <div class="grid-analysis-row">
+              <span class="text-muted">Grid Step</span>
+              <span class="mono">{{ gridAnalysis.gridStep }}</span>
+            </div>
+            <div class="grid-analysis-row">
+              <span class="text-muted">Orders</span>
+              <span class="mono">{{ gridAnalysis.numOrders }}</span>
+            </div>
+            <div class="grid-analysis-row">
+              <span class="text-muted">Budget / Grid</span>
+              <span class="mono" [class.text-red]="gridAnalysis.belowMinOrder">{{ gridAnalysis.budgetPerGrid }}</span>
+            </div>
+            @if (gridAnalysis.minOrderQuote > 0) {
+              <div class="grid-analysis-row">
+                <span class="text-muted">Min Order (quote)</span>
+                <span class="mono">{{ gridAnalysis.minOrderQuote }}</span>
+              </div>
+            }
+            @if (gridAnalysis.minOrderBase > 0) {
+              <div class="grid-analysis-row">
+                <span class="text-muted">Min Order (base)</span>
+                <span class="mono">{{ gridAnalysis.minOrderBase }}</span>
+              </div>
+            }
+            <div class="grid-analysis-row">
+              <span class="text-muted">Gross Profit / Trade</span>
+              <span class="mono text-green">{{ gridAnalysis.grossProfit }}</span>
+            </div>
+            <div class="grid-analysis-row">
+              <span class="text-muted">Fee Cost / Trade</span>
+              <span class="mono text-yellow">{{ gridAnalysis.feeCost }}</span>
+            </div>
+            <div class="grid-analysis-row">
+              <span class="text-muted">Net Profit / Trade</span>
+              <span class="mono" [class.text-green]="gridAnalysis.profitable" [class.text-red]="!gridAnalysis.profitable">
+                {{ gridAnalysis.netProfit }} ({{ gridAnalysis.profitPct }}%)
+              </span>
+            </div>
+          </div>
+          @if (!gridAnalysis.profitable) {
+            <div class="grid-warning">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              Grid is <strong>not profitable</strong>: fees exceed the grid step. Widen the price range or reduce the number of grids.
+            </div>
+          }
+          @if (gridAnalysis.profitable && gridAnalysis.belowMinOrder) {
+            <div class="grid-warning">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              Budget per grid ({{ gridAnalysis.budgetPerGrid }}) is <strong>below the minimum order</strong> of {{ gridAnalysis.minOrderQuote }} quote. Increase budget or reduce grids.
+            </div>
+          }
+        </div>
+      }
+    }
+
+    @if (form.strategy === 'dca') {
+      <div class="form-group">
+        <label class="form-label">Amount per Order</label>
+        <input class="form-input" type="number" [(ngModel)]="params.amount_per_order" step="0.01">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Interval</label>
+        <app-dropdown
+          [options]="intervalOptions"
+          [(value)]="params.interval"
+          placeholder="Select interval...">
+        </app-dropdown>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Max Orders (0 = unlimited)</label>
+        <input class="form-input" type="number" [(ngModel)]="params.max_orders" min="0">
+      </div>
+    }
+
+    @if (form.strategy === 'martingale') {
+      <div class="form-group">
+        <label class="form-label">Initial Amount (quote)</label>
+        <input class="form-input" type="number" [(ngModel)]="params.initial_amount_quote" step="0.01">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Buy-in Trigger (%)</label>
+        <input class="form-input" type="number" [(ngModel)]="params.buy_in_trigger_pct" step="0.1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Take Profit (%)</label>
+        <input class="form-input" type="number" [(ngModel)]="params.take_profit_pct" step="0.1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Position Multiplier</label>
+        <input class="form-input" type="number" [(ngModel)]="params.position_multiplier" step="0.1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Max Buy-ins</label>
+        <input class="form-input" type="number" [(ngModel)]="params.max_buy_ins" min="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Stop Loss (%, 0 = disabled)</label>
+        <input class="form-input" type="number" [(ngModel)]="params.stop_loss_pct" min="0" step="0.5">
+      </div>
+    }
+
+    @if (error) {
+      <div style="color: var(--neon-red); margin-bottom: 12px; font-family: var(--font-mono); font-size: 12px">
+        {{ error }}
+      </div>
+    }
+
+    <div class="modal-footer">
+      <button class="btn btn-primary" (click)="onCreate()">Create Bot</button>
+      <button class="btn" (click)="onCancel()">Cancel</button>
+    </div>
+  </div>
+</div>

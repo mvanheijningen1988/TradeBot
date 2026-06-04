@@ -1,0 +1,432 @@
+<div class="page-content">
+  <div class="page-header">
+    <h1>Dashboard</h1>
+    <button class="btn btn-primary" routerLink="/bots/new">+ New Bot</button>
+  </div>
+
+  <!-- Alerts for bots with problems -->
+  @if (faultBots.length > 0) {
+    <div class="alert-banner">
+      <div class="alert-icon">⚠</div>
+      <div class="alert-body">
+        <strong>Bot Issues Detected</strong>
+        @for (bot of faultBots; track bot.id) {
+          <div class="alert-bot">
+            <span class="alert-dot"></span>
+            {{ bot.name }} ({{ bot.market }}) — <span class="text-red">{{ bot.status }}</span>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Bot table -->
+  <div class="card" style="margin-bottom: 24px">
+    <h2 class="mono text-blue" style="margin-bottom: 16px">Bots</h2>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Market</th>
+          <th>Strategy</th>
+          <th>Status</th>
+          <th>Budget</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (bot of bots; track bot.id) {
+          <tr [class.row-fault]="bot.status === 'fault'">
+            <td class="bot-name-cell">
+              {{ bot.name }}
+              <div class="bot-tooltip mono">
+                <div class="bot-tooltip-row"><span class="text-muted">Strategy</span><span>{{ bot.strategy }}</span></div>
+                <div class="bot-tooltip-row"><span class="text-muted">Market</span><span>{{ bot.market }}</span></div>
+                <div class="bot-tooltip-row"><span class="text-muted">Budget</span><span class="text-green">{{ bot.budget_quote }}</span></div>
+                <div class="bot-tooltip-row"><span class="text-muted">Profit Mode</span><span>{{ bot.profit_mode }}</span></div>
+                @if (bot.profit_mode === 'skim') {
+                  <div class="bot-tooltip-row"><span class="text-muted">Skim %</span><span>{{ bot.profit_skim_pct }}%</span></div>
+                }
+                <div class="bot-tooltip-row"><span class="text-muted">Operator ID</span><span>{{ bot.operator_id }}</span></div>
+                @for (entry of botParamEntries(bot); track entry[0]) {
+                  <div class="bot-tooltip-row"><span class="text-muted">{{ entry[0] }}</span><span>{{ entry[1] }}</span></div>
+                }
+              </div>
+            </td>
+            <td class="mono">{{ bot.market }}</td>
+            <td>{{ bot.strategy }}</td>
+            <td>
+              <span class="badge" [class]="'badge-' + bot.status">
+                {{ bot.status }}
+              </span>
+            </td>
+            <td class="mono text-green">{{ bot.budget_quote | number:'1.2-2' }}</td>
+            <td>
+              @if (bot.status === 'stopped' || bot.status === 'fault') {
+                <button class="btn btn-sm btn-success" (click)="startBot(bot)">Start</button>
+              }
+              @if (bot.status !== 'stopped') {
+                <button class="btn btn-sm btn-danger" (click)="stopBot(bot)">Stop</button>
+              }
+              @if (bot.strategy === 'grid_trading') {
+                <button class="btn btn-sm btn-outline" (click)="showGrid(bot)" title="Show grid">
+                  <i class="fa-solid fa-table-cells"></i>
+                </button>
+              }
+              <button class="btn btn-sm btn-info" [routerLink]="['/diagnostics']" [queryParams]="{bot_id: bot.id}" title="View bot logs">
+                <i class="fa-solid fa-terminal"></i>
+              </button>
+              <button class="btn btn-sm" (click)="deleteBot(bot)">Delete</button>
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="6" class="text-muted" style="text-align:center">
+              No bots configured. Click "+ New Bot" to create one.
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Balances per exchange -->
+  <div class="card" style="margin-bottom: 24px">
+    <h2 class="mono text-blue" style="margin-bottom: 16px">Exchange Balances</h2>
+    @for (ex of exchanges; track ex.id) {
+      <div style="margin-bottom: 16px">
+        <h3 class="mono text-green" style="margin-bottom: 8px; font-size: 14px">{{ ex.name }}</h3>
+        @if (getBalanceError(ex.id)) {
+          <div class="text-red mono" style="font-size: 12px">{{ getBalanceError(ex.id) }}</div>
+        } @else if (getBalances(ex.id).length) {
+          <div class="balance-grid">
+            @for (bal of getBalances(ex.id); track bal.symbol) {
+              <div class="balance-card">
+                <div class="balance-symbol mono">{{ bal.symbol }}</div>
+                <div class="balance-row">
+                  <span class="text-muted">Available</span>
+                  <span class="mono text-green">{{ bal.available }}</span>
+                </div>
+                <div class="balance-row">
+                  <span class="text-muted">In Order</span>
+                  <span class="mono text-yellow">{{ bal.in_order }}</span>
+                </div>
+              </div>
+            }
+          </div>
+        } @else {
+          <div class="text-muted mono" style="font-size: 12px">No balances or loading...</div>
+        }
+      </div>
+    } @empty {
+      <div class="text-muted mono" style="font-size: 12px">No exchanges configured.</div>
+    }
+  </div>
+
+  <!-- Wallet per exchange -->
+  <div class="card" style="margin-bottom: 24px">
+    <h2 class="mono text-blue" style="margin-bottom: 16px">Wallet</h2>
+    @for (ex of exchanges; track ex.id) {
+      @if (wallets[ex.id]) {
+        <div class="wallet-section">
+          <h3 class="mono text-green" style="margin-bottom: 12px; font-size: 14px">{{ ex.name }}</h3>
+          <div class="wallet-stats">
+            <div class="wallet-stat">
+              <span class="text-muted">Balance</span>
+              <span class="mono text-green">{{ wallets[ex.id].balance | number:'1.2-2' }} {{ wallets[ex.id].quote_currency }}</span>
+            </div>
+            <div class="wallet-stat">
+              <span class="text-muted">Allocated</span>
+              <span class="mono text-yellow">{{ wallets[ex.id].allocated | number:'1.2-2' }} {{ wallets[ex.id].quote_currency }}</span>
+            </div>
+            <div class="wallet-stat">
+              <span class="text-muted">Unallocated</span>
+              <span class="mono text-blue">{{ wallets[ex.id].unallocated | number:'1.2-2' }} {{ wallets[ex.id].quote_currency }}</span>
+            </div>
+          </div>
+
+          <div class="wallet-actions">
+            <div class="wallet-action-group">
+              <input type="number" class="input input-sm" placeholder="Amount"
+                     [(ngModel)]="depositAmount[ex.id]" min="0" step="0.01">
+              <button class="btn btn-sm btn-success"
+                      [disabled]="walletActionLoading[ex.id]"
+                      (click)="doDeposit(ex.id)">Deposit</button>
+            </div>
+            <div class="wallet-action-group">
+              <input type="number" class="input input-sm" placeholder="Amount"
+                     [(ngModel)]="withdrawAmount[ex.id]" min="0" step="0.01">
+              <button class="btn btn-sm btn-danger"
+                      [disabled]="walletActionLoading[ex.id]"
+                      (click)="doWithdraw(ex.id)">Withdraw</button>
+            </div>
+            <button class="btn btn-sm" (click)="toggleWalletTx(ex.id)">
+              {{ showWalletTx[ex.id] ? 'Hide' : 'Show' }} Transactions
+            </button>
+          </div>
+
+          @if (showWalletTx[ex.id] && walletTransactions[ex.id]) {
+            <table class="table" style="margin-top: 12px">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Amount</th>
+                  <th>Description</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (tx of walletTransactions[ex.id]; track tx.id) {
+                  <tr>
+                    <td><span class="badge" [class]="'badge-' + (tx.amount >= 0 ? 'running' : 'stopped')">{{ tx.tx_type }}</span></td>
+                    <td class="mono" [class]="tx.amount >= 0 ? 'text-green' : 'text-red'">
+                      {{ tx.amount >= 0 ? '+' : '' }}{{ tx.amount | number:'1.2-2' }}
+                    </td>
+                    <td class="text-muted">{{ tx.description }}</td>
+                    <td class="mono text-muted">{{ tx.created_at | appDateTime }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="4" class="text-muted" style="text-align:center">No transactions.</td></tr>
+                }
+              </tbody>
+            </table>
+          }
+        </div>
+      }
+    }
+  </div>
+
+  <!-- Budget Trend Graph -->
+  <div class="card" style="margin-bottom: 24px">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px">
+      <h2 class="mono text-blue">Budget Trend</h2>
+      <div style="display: flex; gap: 8px; align-items: center">
+        <app-dropdown
+          [options]="budgetBotOptions"
+          [(value)]="selectedBudgetBot"
+          (valueChange)="loadBudgetHistory()"
+          placeholder="Overall"
+          style="width: 180px">
+        </app-dropdown>
+        <div class="time-filter-group">
+          @for (tf of timeFilters; track tf.value) {
+            <button class="btn btn-sm"
+                    [class.btn-active]="selectedTimeFilter === tf.value"
+                    (click)="selectTimeFilter(tf.value)">
+              {{ tf.label }}
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+    <div class="chart-container" #chartContainer>
+      <canvas #budgetChart
+              (mousemove)="onChartMouseMove($event)"
+              (mouseleave)="onChartMouseLeave()"></canvas>
+      @if (chartTooltip.visible) {
+        <div class="chart-tooltip mono"
+             [style.left.px]="chartTooltip.x"
+             [style.top.px]="chartTooltip.y">
+          <div class="chart-tooltip-value">{{ chartTooltip.balance }}</div>
+          <div class="chart-tooltip-time">{{ chartTooltip.time }}</div>
+        </div>
+      }
+      @if (filteredBudgetData.length === 0) {
+        <div class="chart-empty text-muted mono">No budget data available</div>
+      }
+    </div>
+  </div>
+
+  <!-- Orders & Trades -->
+  <div class="card">
+    <div class="tab-bar">
+      <button class="tab-btn" [class.tab-active]="activeOrderTab === 'open'" (click)="activeOrderTab = 'open'">
+        Open Orders
+        @if (openOrders.length) {
+          <span class="tab-count">{{ openOrders.length }}</span>
+        }
+      </button>
+      <button class="tab-btn" [class.tab-active]="activeOrderTab === 'history'" (click)="activeOrderTab = 'history'">Order History</button>
+      <button class="tab-btn" [class.tab-active]="activeOrderTab === 'trades'" (click)="activeOrderTab = 'trades'">Trade History</button>
+    </div>
+
+    @if (activeOrderTab === 'open') {
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Bot</th>
+            <th>Market</th>
+            <th>Side</th>
+            <th>Type</th>
+            <th>Amount</th>
+            <th>Price</th>
+            <th>Status</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (order of openOrders; track order['exchange_order_id']) {
+            <tr>
+              <td>{{ getBotName(order['bot_id']) }}</td>
+              <td class="mono">{{ order['market'] }}</td>
+              <td>
+                <span [class]="order['side'] === 'buy' ? 'text-green' : 'text-red'">
+                  {{ order['side'] }}
+                </span>
+              </td>
+              <td class="mono">{{ order['order_type'] }}</td>
+              <td class="mono">{{ order['amount'] }}</td>
+              <td class="mono">{{ order['price'] }}</td>
+              <td><span class="badge badge-running">{{ order['status'] }}</span></td>
+              <td class="mono text-muted">{{ order['created_at'] | appDateTime }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="8" class="text-muted" style="text-align:center">No open orders.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    @if (activeOrderTab === 'history') {
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Bot</th>
+            <th>Market</th>
+            <th>Side</th>
+            <th>Type</th>
+            <th>Amount</th>
+            <th>Price</th>
+            <th>Status</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (order of orderHistory; track order['id']) {
+            <tr>
+              <td>{{ getBotName(order['bot_id']) }}</td>
+              <td class="mono">{{ order['market'] }}</td>
+              <td>
+                <span [class]="order['side'] === 'buy' ? 'text-green' : 'text-red'">
+                  {{ order['side'] }}
+                </span>
+              </td>
+              <td class="mono">{{ order['order_type'] }}</td>
+              <td class="mono">{{ order['amount'] }}</td>
+              <td class="mono">{{ order['price'] }}</td>
+              <td><span class="badge" [class]="'badge-' + (order['status'] === 'filled' ? 'running' : 'stopped')">{{ order['status'] }}</span></td>
+              <td class="mono text-muted">{{ order['created_at'] | appDateTime }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="8" class="text-muted" style="text-align:center">No order history.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    @if (activeOrderTab === 'trades') {
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Bot</th>
+            <th>Market</th>
+            <th>Side</th>
+            <th>Amount</th>
+            <th>Price</th>
+            <th>Fee</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (trade of tradeHistory; track trade['id']) {
+            <tr>
+              <td>{{ getBotName(trade['bot_id']) }}</td>
+              <td class="mono">{{ trade['market'] }}</td>
+              <td>
+                <span [class]="trade['side'] === 'buy' ? 'text-green' : 'text-red'">
+                  {{ trade['side'] }}
+                </span>
+              </td>
+              <td class="mono">{{ trade['amount'] }}</td>
+              <td class="mono">{{ trade['price'] }}</td>
+              <td class="mono text-muted">{{ trade['fee'] }}</td>
+              <td class="mono text-muted">{{ trade['created_at'] | appDateTime }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="7" class="text-muted" style="text-align:center">No trade history.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </div>
+</div>
+
+<!-- Grid Modal -->
+@if (gridModalBot) {
+  <dialog
+    class="modal-backdrop"
+    open
+    (click)="gridModalBot = null"
+    (keydown.escape)="gridModalBot = null"
+  >
+    <div
+      class="modal-dialog"
+      [class.dragging]="isModalDragging"
+      [style.transform]="'translate(' + modalOffsetX + 'px, ' + modalOffsetY + 'px)'"
+      (click)="$event.stopPropagation()"
+      (keydown.escape)="gridModalBot = null"
+      style="width: 480px"
+    >
+      <div class="modal-header" (mousedown)="startModalDrag($event)">
+        <h3 class="modal-title mono text-blue">Grid — {{ gridModalBot.name }}</h3>
+        <button
+          class="modal-close"
+          (mousedown)="$event.stopPropagation()"
+          (click)="gridModalBot = null"
+        >&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="grid-info mono" style="margin-bottom: 12px; font-size: 12px; color: var(--text-muted)">
+          {{ gridModalBot.market }} &middot;
+          {{ gridLevels.length }} levels &middot;
+          {{ gridModalBot.strategy_params['lower_price'] }} – {{ gridModalBot.strategy_params['upper_price'] }}
+        </div>
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Price</th>
+              <th>Order</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (lvl of gridLevels; track lvl.index) {
+              <tr [class.grid-row-active]="lvl.orderType">
+                <td class="text-muted">{{ lvl.index }}</td>
+                <td class="mono">{{ lvl.price }}</td>
+                <td>
+                  @if (lvl.orderType) {
+                    <span class="badge" [class]="lvl.orderType === 'buy' ? 'badge-running' : 'badge-fault'">
+                      {{ lvl.orderType | uppercase }}
+                    </span>
+                  } @else {
+                    <span class="text-muted">—</span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-sm" (click)="gridModalBot = null">Close</button>
+      </div>
+    </div>
+  </dialog>
+}
