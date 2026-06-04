@@ -3,6 +3,19 @@
     <h1>Settings</h1>
   </div>
 
+  <!-- Tab navigation -->
+  <nav class="tab-nav">
+    <button class="tab-btn" [class.active]="activeTab === 'general'" (click)="switchTab('general')">
+      General
+    </button>
+    <button class="tab-btn" [class.active]="activeTab === 'news'" (click)="switchTab('news')">
+      News &amp; Sentiment
+    </button>
+  </nav>
+
+  <!-- ═══════════════════════ GENERAL TAB ═══════════════════════ -->
+  @if (activeTab === 'general') {
+
   <!-- Exchange Management -->
   <div class="card" style="margin-bottom: 24px">
     <h2 class="mono text-blue" style="margin-bottom: 16px">Exchanges</h2>
@@ -99,4 +112,224 @@
       </app-dropdown>
     </div>
   </div>
+
+  } <!-- end general tab -->
+
+  <!-- ════════════════════════ NEWS TAB ═════════════════════════ -->
+  @if (activeTab === 'news') {
+
+  <!-- RSS Feeds -->
+  <div class="card" style="margin-bottom: 24px">
+    <h2 class="mono text-blue" style="margin-bottom: 16px">RSS Feeds</h2>
+    <table class="table">
+      <thead>
+        <tr><th>Name</th><th>URL</th><th>Enabled</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        @for (feed of feeds; track feed.id) {
+          <tr>
+            <td class="mono">{{ feed.name }}</td>
+            <td class="mono text-muted" style="font-size:12px; word-break:break-all">{{ feed.url }}</td>
+            <td>
+              <label class="toggle">
+                <input type="checkbox" [checked]="feed.enabled" (change)="toggleFeed(feed)">
+                <span class="toggle-slider"></span>
+              </label>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-danger" (click)="deleteFeed(feed)">Delete</button>
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="4" class="text-muted" style="text-align:center">No feeds configured.</td></tr>
+        }
+      </tbody>
+    </table>
+    <hr style="border-color: var(--border-color); margin: 20px 0">
+    <h3 class="mono" style="margin-bottom: 12px">Add Feed</h3>
+    <div style="display: grid; grid-template-columns: 1fr 2fr auto; gap: 12px; align-items: flex-end">
+      <div class="form-group" style="margin-bottom: 0">
+        <label class="form-label">Name</label>
+        <input class="form-input" [(ngModel)]="newFeed.name" placeholder="CoinDesk">
+      </div>
+      <div class="form-group" style="margin-bottom: 0">
+        <label class="form-label">RSS URL</label>
+        <input class="form-input" [(ngModel)]="newFeed.url" placeholder="https://…/feed">
+      </div>
+      <button class="btn btn-primary" (click)="addFeed()">Add</button>
+    </div>
+  </div>
+
+  <!-- Coin Mappings -->
+  <div class="card" style="margin-bottom: 24px">
+    <h2 class="mono text-blue" style="margin-bottom: 16px">Coin Name Mappings</h2>
+    <p class="text-muted" style="margin-bottom: 12px; font-size: 13px">
+      Maps coin names (e.g. "bitcoin") to ticker symbols (e.g. "BTC").
+      Mark as <em>ambiguous</em> when the name is also a common English word.
+    </p>
+    <table class="table">
+      <thead>
+        <tr><th>Name</th><th>Symbol</th><th>Ambiguous</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        @for (m of coinMappings; track m.id) {
+          @if (editingMappingId === m.id) {
+            <tr>
+              <td><input class="form-input" [(ngModel)]="editMappingForm.name"></td>
+              <td><input class="form-input" [(ngModel)]="editMappingForm.symbol" style="text-transform:uppercase"></td>
+              <td>
+                <label class="toggle">
+                  <input type="checkbox" [(ngModel)]="editMappingForm.ambiguous">
+                  <span class="toggle-slider"></span>
+                </label>
+              </td>
+              <td>
+                <button class="btn btn-sm btn-primary" (click)="saveEditMapping(m)">Save</button>
+                <button class="btn btn-sm" (click)="cancelEditMapping()">Cancel</button>
+              </td>
+            </tr>
+          } @else {
+            <tr>
+              <td class="mono">{{ m.name }}</td>
+              <td class="mono text-blue">{{ m.symbol }}</td>
+              <td>
+                @if (m.ambiguous) {
+                  <span class="badge badge-fault">yes</span>
+                } @else {
+                  <span class="badge badge-running">no</span>
+                }
+              </td>
+              <td>
+                <button class="btn btn-sm" (click)="startEditMapping(m)">Edit</button>
+                <button class="btn btn-sm btn-danger" (click)="deleteCoinMapping(m)">Delete</button>
+              </td>
+            </tr>
+          }
+        } @empty {
+          <tr><td colspan="4" class="text-muted" style="text-align:center">No mappings configured.</td></tr>
+        }
+      </tbody>
+    </table>
+    <hr style="border-color: var(--border-color); margin: 20px 0">
+    <h3 class="mono" style="margin-bottom: 12px">Add Mapping</h3>
+    <div style="display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 12px; align-items: flex-end">
+      <div class="form-group" style="margin-bottom: 0">
+        <label class="form-label">Coin Name</label>
+        <input class="form-input" [(ngModel)]="newCoinMapping.name" placeholder="bitcoin">
+      </div>
+      <div class="form-group" style="margin-bottom: 0">
+        <label class="form-label">Symbol</label>
+        <input class="form-input" [(ngModel)]="newCoinMapping.symbol" placeholder="BTC" style="text-transform:uppercase">
+      </div>
+      <div class="form-group" style="margin-bottom: 0">
+        <label class="form-label">Ambiguous</label>
+        <label class="toggle" style="margin-top: 8px; display:block">
+          <input type="checkbox" [(ngModel)]="newCoinMapping.ambiguous">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <button class="btn btn-primary" style="align-self:flex-end" (click)="addCoinMapping()">Add</button>
+    </div>
+  </div>
+
+  <!-- Engine Parameters -->
+  <div class="card" style="margin-bottom: 24px">
+    <h2 class="mono text-blue" style="margin-bottom: 4px">Engine Parameters</h2>
+    <p class="text-muted" style="margin-bottom: 20px; font-size: 13px">
+      Only signals meeting these thresholds are stored and shown in the dashboard.
+    </p>
+
+    <div class="confidence-row">
+      <div class="form-group" style="margin-bottom: 0; flex: 1">
+        <label class="form-label">
+          Minimum Confidence &nbsp;
+          <span class="mono text-blue">{{ (minConfidence * 100).toFixed(0) }}%</span>
+        </label>
+        <input
+          type="range"
+          class="confidence-slider"
+          min="0" max="1" step="0.01"
+          [(ngModel)]="minConfidence">
+        <div class="confidence-labels">
+          <span>0% (all signals)</span>
+          <span>50%</span>
+          <span>100% (only highest)</span>
+        </div>
+      </div>
+      <button
+        class="btn btn-primary"
+        style="align-self: flex-start; margin-top: 26px"
+        [disabled]="minConfidenceSaving || signalsRefreshing"
+        (click)="saveMinConfidence()">
+        {{ minConfidenceSaving ? 'Saving…' : (signalsRefreshing ? 'Refreshing…' : 'Save') }}
+      </button>
+    </div>
+
+    @if (signalsRefreshing) {
+      <div class="settings-refresh-state">
+        <span class="spinner"></span>
+        <span class="mono text-muted">Applying filter and refreshing signals...</span>
+      </div>
+    }
+  </div>
+
+  <!-- Word Filters -->
+  <div class="card">
+    <h2 class="mono text-blue" style="margin-bottom: 16px">Word Filters</h2>
+    <p class="text-muted" style="margin-bottom: 16px; font-size: 13px">
+      <strong>Include words:</strong> an article must contain at least one of these words to be processed.<br>
+      <strong>Exclude words:</strong> articles containing any of these words are discarded.
+    </p>
+
+    <div class="word-filter-grid">
+      <!-- Include words -->
+      <div class="word-filter-column">
+        <h3 class="mono text-blue" style="margin-bottom: 10px">Include words</h3>
+        <div class="word-chips">
+          @for (f of includeWords; track f.id) {
+            <span class="chip chip-include">
+              {{ f.word }}
+              <button class="chip-del" (click)="deleteWordFilter(f)" title="Remove">×</button>
+            </span>
+          } @empty {
+            <span class="text-muted" style="font-size:13px">None — all articles pass through.</span>
+          }
+        </div>
+      </div>
+
+      <!-- Exclude words -->
+      <div class="word-filter-column">
+        <h3 class="mono" style="color: var(--neon-red); margin-bottom: 10px">Exclude words</h3>
+        <div class="word-chips">
+          @for (f of excludeWords; track f.id) {
+            <span class="chip chip-exclude">
+              {{ f.word }}
+              <button class="chip-del" (click)="deleteWordFilter(f)" title="Remove">×</button>
+            </span>
+          } @empty {
+            <span class="text-muted" style="font-size:13px">None — no words excluded.</span>
+          }
+        </div>
+      </div>
+    </div>
+
+    <hr style="border-color: var(--border-color); margin: 20px 0">
+    <h3 class="mono" style="margin-bottom: 12px">Add Filter</h3>
+    <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: flex-end">
+      <div class="form-group" style="margin-bottom: 0">
+        <label class="form-label">Word</label>
+        <input class="form-input" [(ngModel)]="newWord" placeholder="e.g. scam" (keyup.enter)="addWordFilter()">
+      </div>
+      <div class="form-group" style="margin-bottom: 0">
+        <label class="form-label">Type</label>
+        <select class="form-input" [(ngModel)]="newWordType">
+          <option value="exclude">Exclude</option>
+          <option value="include">Include</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" style="align-self:flex-end" (click)="addWordFilter()">Add</button>
+    </div>
+  </div>
+
+  } <!-- end news tab -->
 </div>

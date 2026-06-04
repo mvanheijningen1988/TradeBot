@@ -168,4 +168,42 @@ TABLES: list[str] = [
         timestamp       TEXT    NOT NULL DEFAULT (datetime('now'))
     )
     """,
+
+    # ── News feed sources ─────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS news_feeds (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT    NOT NULL,
+        url         TEXT    NOT NULL UNIQUE,
+        enabled     INTEGER NOT NULL DEFAULT 1,
+        created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
+
+    # ── News coin mappings (name → ticker symbol) ─────────────────
+    """
+    CREATE TABLE IF NOT EXISTS news_coin_mappings (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT    NOT NULL UNIQUE,
+        symbol      TEXT    NOT NULL,
+        ambiguous   INTEGER NOT NULL DEFAULT 0
+    )
+    """,
+
+    # ── News word filters (include / exclude) ─────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS news_word_filters (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        word        TEXT    NOT NULL UNIQUE,
+        filter_type TEXT    NOT NULL DEFAULT 'exclude'
+    )
+    """,
+
+    # ── News engine parameters (key-value) ───────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS news_engine_params (
+        key         TEXT    NOT NULL PRIMARY KEY,
+        value       TEXT    NOT NULL
+    )
+    """,
 ]

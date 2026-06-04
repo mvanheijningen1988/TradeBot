@@ -21,6 +21,7 @@ from manager.database.repositories import (
     BudgetHistoryRepository,
     ExchangeRepository,
     LogEntryRepository,
+    NewsSettingsRepository,
     OrderHistoryRepository,
     TradeHistoryRepository,
     UserRepository,
@@ -43,6 +44,50 @@ try:
 except ImportError:
     NewsEngineService = None
     logger.warning("News engine not available – services package not found")
+
+
+async def _seed_news_defaults(repo) -> None:
+    """Seed RSS feeds and coin mappings into DB if tables are empty."""
+    import json
+    import os
+
+    if await repo.count_feeds() == 0:
+        try:
+            from services.news_engine.config.news_sources import (
+                DEFAULT_SOURCES,
+            )
+            for src in DEFAULT_SOURCES:
+                await repo.create_feed(src.name, src.url)
+            logger.info(
+                "Seeded %d default RSS feeds.", len(DEFAULT_SOURCES)
+            )
+        except Exception:
+            logger.exception("Failed to seed default RSS feeds.")
+
+    if await repo.count_coin_mappings() == 0:
+        try:
+            mapping_path = os.path.join(
+                os.path.dirname(__file__),
+                "..",
+                "services",
+                "news_engine",
+                "config",
+                "coin_mapping.json",
+            )
+            mapping_path = os.path.normpath(mapping_path)
+            with open(mapping_path, encoding="utf-8") as fh:
+                data = json.load(fh)
+            ambiguous = set(data.get("ambiguous_symbols", []))
+            for name, symbol in data.get("coins", {}).items():
+                await repo.create_coin_mapping(
+                    name, symbol, symbol in ambiguous
+                )
+            logger.info(
+                "Seeded %d default coin mappings.",
+                len(data.get("coins", {})),
+            )
+        except Exception:
+            logger.exception("Failed to seed default coin mappings.")
 
 
 @asynccontextmanager
@@ -70,6 +115,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.exchange_repo = exchange_repo
     app.state.order_repo = order_repo
 
+    news_settings_repo = NewsSettingsRepository(db)
+    app.state.news_settings_repo = news_settings_repo
+    await _seed_news_defaults(news_settings_repo)
+
     # Services.
     log_service = LogService(config, log_repo)
     log_service.setup_logging()
@@ -93,7 +142,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     worker_service = WorkerService(config, worker_repo, bot_repo, log_service)
     worker_service.set_broadcast_callback(ws_manager.broadcast_ui)
-    await worker_service.start_health_monitor()
+    worker_service.start_health_monitor()
     app.state.worker_service = worker_service
 
     bot_service = BotService(
@@ -107,7 +156,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # News Signal Engine.
     if NewsEngineService is not None:
-        news_engine = NewsEngineService(db=db)
+        news_engine = NewsEngineService(
+            db=db, news_settings_repo=news_settings_repo
+        )
         await news_engine.start()
         app.state.news_engine = news_engine
 

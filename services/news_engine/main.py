@@ -20,6 +20,7 @@ from typing import Optional
 
 from services.news_engine.collector.news_collector import NewsCollector
 from services.news_engine.config.coin_map import CoinMap
+from services.news_engine.config.news_sources import NewsSource
 from services.news_engine.ml.event_classifier import EventClassifier
 from services.news_engine.ml.rsi_model import RSIModel
 from services.news_engine.ml.sentiment_model import SentimentModel
@@ -36,8 +37,10 @@ _POLL_INTERVAL = 300  # 5 minutes
 class NewsEngineService:
     """Main orchestrator for the crypto news signal pipeline."""
 
-    def __init__(self, db=None) -> None:
+    def __init__(self, db=None, news_settings_repo=None) -> None:
         self._db = db
+        self._settings_repo = news_settings_repo
+        self._min_confidence: float = 0.0
         self._coin_map = CoinMap()
         self._collector = NewsCollector()
         self._parser = ArticleParser()
@@ -48,6 +51,9 @@ class NewsEngineService:
         self._signal_engine = SignalEngine()
         self._store = SignalStore(db=db)
         self._task: Optional[asyncio.Task] = None
+        self._refresh_task: Optional[asyncio.Task] = None
+        self._cycle_lock = asyncio.Lock()
+        self._active_cycles = 0
         self._running = False
 
     @property
@@ -59,6 +65,11 @@ class NewsEngineService:
     def is_running(self) -> bool:
         """Return True when the pipeline loop is active."""
         return self._running
+
+    @property
+    def is_processing(self) -> bool:
+        """Return True while a processing cycle is currently running."""
+        return self._active_cycles > 0
 
     @property
     def sentiment_model_name(self) -> str:
@@ -74,6 +85,7 @@ class NewsEngineService:
             return
 
         await self._store.ensure_table()
+        await self._load_settings()
         self._running = True
         self._task = asyncio.create_task(self._run_loop())
         logger.info("Crypto News Signal Engine started.")
@@ -92,17 +104,84 @@ class NewsEngineService:
         """Main loop — runs a processing cycle every 5 minutes."""
         while self._running:
             try:
-                await self._process_cycle()
+                await self._run_cycle_once()
             except Exception:
                 logger.exception("Processing cycle failed")
             await asyncio.sleep(_POLL_INTERVAL)
+
+    async def _run_cycle_once(self) -> None:
+        """Run one cycle with a lock and processing state tracking."""
+        async with self._cycle_lock:
+            self._active_cycles += 1
+            try:
+                await self._process_cycle()
+            finally:
+                self._active_cycles = max(0, self._active_cycles - 1)
+
+    def trigger_refresh_cycle(self) -> bool:
+        """Start an immediate cycle in the background if not already queued."""
+        if self._refresh_task and not self._refresh_task.done():
+            return False
+        self._refresh_task = asyncio.create_task(self._run_cycle_once())
+        return True
+
+    async def reload_settings(self) -> None:
+        """Public method to reload all settings from the DB immediately."""
+        await self._load_settings()
+        await self._store.purge_below_confidence(self._min_confidence)
+        logger.info("News engine settings reloaded.")
+
+    async def _load_settings(self) -> None:
+        """Reload feeds, coin mappings, and word filters from the database."""
+        if not self._settings_repo:
+            return
+
+        # Feeds → collector sources.
+        feeds = await self._settings_repo.list_feeds()
+        sources = [
+            NewsSource(name=f["name"], url=f["url"])
+            for f in feeds
+            if f["enabled"]
+        ]
+        self._collector.update_sources(sources)
+
+        # Coin mappings → coin map + extractor.
+        mappings = await self._settings_repo.list_coin_mappings()
+        coins = {m["name"]: m["symbol"] for m in mappings}
+        ambiguous = [
+            m["symbol"] for m in mappings if m["ambiguous"]
+        ]
+        self._coin_map.load_from_db_data(coins, ambiguous)
+        self._extractor.reload()
+
+        # Word filters → article parser.
+        filters = await self._settings_repo.list_word_filters()
+        include_words = {
+            f["word"] for f in filters if f["filter_type"] == "include"
+        }
+        exclude_words = {
+            f["word"] for f in filters if f["filter_type"] == "exclude"
+        }
+        self._parser.update_filters(include_words, exclude_words)
+
+        # Engine parameters.
+        raw = await self._settings_repo.get_param(
+            "min_confidence", "0.0"
+        )
+        try:
+            self._min_confidence = float(raw)
+        except ValueError:
+            self._min_confidence = 0.0
+        logger.debug(
+            "min_confidence threshold: %.2f", self._min_confidence
+        )
 
     async def _process_cycle(self) -> None:
         """Execute one complete processing cycle."""
         logger.info("Starting news processing cycle.")
 
-        # Check for coin mapping updates.
-        self._extractor.reload()
+        # Reload settings (feeds, coin maps, word filters) from DB.
+        await self._load_settings()
 
         # Flush any pending DB writes from previous failures.
         await self._store.flush_pending()
@@ -171,6 +250,23 @@ class NewsEngineService:
             events=events,
             rsi_context=rsi_context,
         )
+
+        # Filter by minimum confidence threshold.
+        if self._min_confidence > 0.0:
+            before = len(signals)
+            signals = [
+                s for s in signals
+                if s.confidence >= self._min_confidence
+            ]
+            dropped = before - len(signals)
+            if dropped:
+                logger.debug(
+                    "Dropped %d signal(s) below min_confidence "
+                    "%.2f for %s",
+                    dropped,
+                    self._min_confidence,
+                    article.url,
+                )
 
         return signals
 

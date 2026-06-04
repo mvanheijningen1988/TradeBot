@@ -178,6 +178,46 @@ class SignalStore:
         items.reverse()
         return items[:limit]
 
+    async def purge_below_confidence(
+        self, threshold: float
+    ) -> None:
+        """Remove signals below *threshold* from memory and the DB."""
+        if threshold <= 0.0:
+            return
+        before = len(self._cache)
+        self._cache = deque(
+            (s for s in self._cache if s.confidence >= threshold),
+            maxlen=_MAX_IN_MEMORY,
+        )
+        purged_mem = before - len(self._cache)
+
+        if not self._db:
+            if purged_mem:
+                logger.info(
+                    "Purged %d in-memory signal(s) below "
+                    "confidence %.2f (no DB).",
+                    purged_mem,
+                    threshold,
+                )
+            return
+
+        try:
+            await self._db.execute(
+                "DELETE FROM news_signals WHERE confidence < ?",
+                (threshold,),
+            )
+            await self._db.commit()
+            logger.info(
+                "Purged signal(s) below confidence %.2f "
+                "(%d from memory).",
+                threshold,
+                purged_mem,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to purge low-confidence signals from DB"
+            )
+
     def get_by_coin(
         self, coin: str, limit: int = 20
     ) -> list[NewsSignal]:

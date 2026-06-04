@@ -100,3 +100,25 @@ class CoinMap:
     def get_symbol_for_name(self, name: str) -> Optional[str]:
         """Look up symbol by coin name (case-insensitive)."""
         return self._name_to_symbol.get(name.lower())
+
+    def load_from_db_data(
+        self,
+        coins: dict[str, str],
+        ambiguous_symbols: list[str],
+    ) -> None:
+        """Replace the current mapping with data loaded from the database.
+
+        ``coins`` maps coin names to ticker symbols.  ``ambiguous_symbols``
+        lists symbols that are common English words and require the full
+        name to appear in the article to confirm a mention.
+        """
+        self._name_to_symbol = {
+            n.lower(): s for n, s in coins.items()
+        }
+        self._symbol_to_name = {s: n for n, s in coins.items()}
+        self._ambiguous_symbols = set(ambiguous_symbols)
+        logger.info(
+            "Coin mapping updated from DB: %d coins, %d ambiguous.",
+            len(coins),
+            len(ambiguous_symbols),
+        )

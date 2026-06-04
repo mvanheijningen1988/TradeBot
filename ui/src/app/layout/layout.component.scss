@@ -239,6 +239,27 @@ $signals-collapsed-width: 36px;
   text-shadow: var(--glow-blue);
 }
 
+.signals-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 4px;
+
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--neon-blue);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .signals-section {
   padding: 0 12px 12px;
 }

@@ -58,6 +58,13 @@
     <div class="signals-panel-content">
       <h3 class="signals-panel-title mono text-blue">Signals</h3>
 
+      @if (signalsLoading) {
+        <div class="signals-loading">
+          <span class="spinner"></span>
+          <span class="mono text-muted" style="font-size:12px">Applying filter…</span>
+        </div>
+      }
+
       <!-- Bullish -->
       <div class="signals-section">
         <h4 class="mono text-green signals-section-title">

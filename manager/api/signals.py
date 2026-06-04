@@ -70,6 +70,7 @@ async def get_engine_status(
     engine = _get_engine(request)
     return {
         "running": engine.is_running,
+        "processing": engine.is_processing,
         "finbert_enabled": engine.sentiment_model_name != "vader",
         "sentiment_model": engine.sentiment_model_name,
     }

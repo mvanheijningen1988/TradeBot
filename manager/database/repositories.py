@@ -782,3 +782,167 @@ class WalletRepository:
             (wallet_id, limit),
         )
         return [dict(r) for r in rows]
+
+
+# ── News settings repository ─────────────────────────────────────
+
+
+class NewsSettingsRepository:
+    """CRUD for news feeds, coin mappings, and word filters."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    # ── Feeds ────────────────────────────────────────────────────
+
+    async def list_feeds(self) -> list[dict]:
+        """Return all configured RSS news feeds."""
+        rows = await self._db.fetch_all(
+            "SELECT * FROM news_feeds ORDER BY id"
+        )
+        return [dict(r) for r in rows]
+
+    async def count_feeds(self) -> int:
+        """Return the number of configured feeds."""
+        row = await self._db.fetch_one(
+            "SELECT COUNT(*) AS cnt FROM news_feeds"
+        )
+        return row["cnt"]
+
+    async def create_feed(self, name: str, url: str) -> int:
+        """Add an RSS feed and return its id."""
+        cursor = await self._db.execute(
+            "INSERT INTO news_feeds (name, url) VALUES (?, ?)",
+            (name, url),
+        )
+        await self._db.commit()
+        return cursor.lastrowid
+
+    async def update_feed(
+        self, feed_id: int, **fields: Any
+    ) -> None:
+        """Update name or enabled state for a feed."""
+        allowed = {"name", "url", "enabled"}
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        if not updates:
+            return
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        await self._db.execute(
+            f"UPDATE news_feeds SET {set_clause} WHERE id = ?",
+            (*updates.values(), feed_id),
+        )
+        await self._db.commit()
+
+    async def delete_feed(self, feed_id: int) -> None:
+        """Remove an RSS feed by id."""
+        await self._db.execute(
+            "DELETE FROM news_feeds WHERE id = ?", (feed_id,)
+        )
+        await self._db.commit()
+
+    # ── Coin mappings ────────────────────────────────────────────
+
+    async def list_coin_mappings(self) -> list[dict]:
+        """Return all coin name → symbol mappings."""
+        rows = await self._db.fetch_all(
+            "SELECT * FROM news_coin_mappings ORDER BY name"
+        )
+        return [dict(r) for r in rows]
+
+    async def count_coin_mappings(self) -> int:
+        """Return the number of stored coin mappings."""
+        row = await self._db.fetch_one(
+            "SELECT COUNT(*) AS cnt FROM news_coin_mappings"
+        )
+        return row["cnt"]
+
+    async def create_coin_mapping(
+        self, name: str, symbol: str, ambiguous: bool = False
+    ) -> int:
+        """Add a coin mapping and return its id."""
+        cursor = await self._db.execute(
+            "INSERT INTO news_coin_mappings (name, symbol, ambiguous) "
+            "VALUES (?, ?, ?)",
+            (name, symbol, int(ambiguous)),
+        )
+        await self._db.commit()
+        return cursor.lastrowid
+
+    async def update_coin_mapping(
+        self, mapping_id: int, **fields: Any
+    ) -> None:
+        """Update coin name, symbol, or ambiguous flag."""
+        allowed = {"name", "symbol", "ambiguous"}
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        if not updates:
+            return
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        await self._db.execute(
+            f"UPDATE news_coin_mappings SET {set_clause} WHERE id = ?",
+            (*updates.values(), mapping_id),
+        )
+        await self._db.commit()
+
+    async def delete_coin_mapping(self, mapping_id: int) -> None:
+        """Delete a coin mapping by id."""
+        await self._db.execute(
+            "DELETE FROM news_coin_mappings WHERE id = ?",
+            (mapping_id,),
+        )
+        await self._db.commit()
+
+    # ── Word filters ─────────────────────────────────────────────
+
+    async def list_word_filters(self) -> list[dict]:
+        """Return all include/exclude word filters."""
+        rows = await self._db.fetch_all(
+            "SELECT * FROM news_word_filters ORDER BY filter_type, word"
+        )
+        return [dict(r) for r in rows]
+
+    async def create_word_filter(
+        self, word: str, filter_type: str
+    ) -> int:
+        """Add a word filter (include or exclude) and return its id."""
+        if filter_type not in ("include", "exclude"):
+            raise ValueError(
+                f"filter_type must be 'include' or 'exclude', "
+                f"got '{filter_type}'"
+            )
+        cursor = await self._db.execute(
+            "INSERT INTO news_word_filters (word, filter_type) "
+            "VALUES (?, ?)",
+            (word.lower(), filter_type),
+        )
+        await self._db.commit()
+        return cursor.lastrowid
+
+    async def delete_word_filter(self, filter_id: int) -> None:
+        """Delete a word filter by id."""
+        await self._db.execute(
+            "DELETE FROM news_word_filters WHERE id = ?",
+            (filter_id,),
+        )
+        await self._db.commit()
+
+    # ── Engine parameters ────────────────────────────────────────
+
+    async def get_param(
+        self, key: str, default: str = ""
+    ) -> str:
+        """Return a news engine parameter value by key."""
+        row = await self._db.fetch_one(
+            "SELECT value FROM news_engine_params WHERE key = ?",
+            (key,),
+        )
+        return row["value"] if row else default
+
+    async def set_param(self, key: str, value: str) -> None:
+        """Insert or replace a news engine parameter."""
+        await self._db.execute(
+            "INSERT INTO news_engine_params (key, value) "
+            "VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+        await self._db.commit()

@@ -54,10 +54,28 @@ def _is_english(text: str) -> bool:
 class ArticleParser:
     """Cleans and normalises raw articles for analysis."""
 
+    def __init__(
+        self,
+        include_words: set[str] | None = None,
+        exclude_words: set[str] | None = None,
+    ) -> None:
+        self._include_words: set[str] = include_words or set()
+        self._exclude_words: set[str] = exclude_words or set()
+
+    def update_filters(
+        self,
+        include_words: set[str],
+        exclude_words: set[str],
+    ) -> None:
+        """Replace include/exclude word filter sets."""
+        self._include_words = include_words
+        self._exclude_words = exclude_words
+
     def parse(self, article: Article) -> ParsedArticle | None:
         """Clean an article and combine title + content.
 
-        Returns None and logs if the article is non-English.
+        Returns None and logs if the article is non-English, or if it
+        fails the active include/exclude word filters.
         """
         raw_text = f"{article.title} {article.content or article.summary}"
         cleaned = _strip_html(raw_text)
@@ -69,6 +87,31 @@ class ArticleParser:
                 "Skipping non-English article: %s", article.url
             )
             return None
+
+        text_lower = cleaned.lower()
+
+        # Include filter: at least one word must be present.
+        if self._include_words:
+            if not any(w in text_lower for w in self._include_words):
+                logger.debug(
+                    "Article excluded (include filter): %s",
+                    article.url,
+                )
+                return None
+
+        # Exclude filter: reject if any excluded word is present.
+        if self._exclude_words:
+            hit = next(
+                (w for w in self._exclude_words if w in text_lower),
+                None,
+            )
+            if hit:
+                logger.debug(
+                    "Article excluded by word '%s': %s",
+                    hit,
+                    article.url,
+                )
+                return None
 
         return ParsedArticle(
             text=cleaned,

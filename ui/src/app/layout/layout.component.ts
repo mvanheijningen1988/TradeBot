@@ -24,6 +24,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly signalsService = inject(SignalsService);
   private readonly router = inject(Router);
   private wsSub?: Subscription;
+  private signalsRefreshSub?: Subscription;
   private signalsRefreshTimer?: ReturnType<typeof setInterval>;
 
   currentUser: User | null = null;
@@ -35,6 +36,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   investSignals: SignalRecommendation[] = [];
   removeSignals: SignalRecommendation[] = [];
+  signalsLoading = false;
   hoveredSignal: SignalRecommendation | null = null;
   hoveredIsBuy = true;
   tooltipTop = 0;
@@ -62,6 +64,13 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.signalsRefreshTimer = setInterval(() => {
       this.loadSignals();
     }, 30_000);
+
+    this.signalsRefreshSub = this.signalsService.refresh$.subscribe(() => {
+      this.investSignals = [];
+      this.removeSignals = [];
+      this.signalsLoading = true;
+      this.loadSignals(true);
+    });
 
     this.wsService.connect();
     this.wsSub = this.wsService.messages.subscribe((msg) => {
@@ -99,6 +108,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.wsSub?.unsubscribe();
+    this.signalsRefreshSub?.unsubscribe();
     if (this.signalsRefreshTimer) {
       clearInterval(this.signalsRefreshTimer);
       this.signalsRefreshTimer = undefined;
@@ -119,15 +129,23 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.signalsPanelOpen = !this.signalsPanelOpen;
   }
 
-  loadSignals(): void {
+  loadSignals(notifyRefreshComplete = false): void {
     this.signalsService.getRecommendations().subscribe({
       next: (data) => {
         this.investSignals = data.invest;
         this.removeSignals = data.remove;
+        this.signalsLoading = false;
+        if (notifyRefreshComplete) {
+          this.signalsService.refreshCompleted$.next();
+        }
       },
       error: () => {
         this.investSignals = [];
         this.removeSignals = [];
+        this.signalsLoading = false;
+        if (notifyRefreshComplete) {
+          this.signalsService.refreshCompleted$.next();
+        }
       },
     });
   }

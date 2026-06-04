@@ -36,6 +36,15 @@ class NewsCollector:
         self._seen_urls: set[str] = set()
         self._seen_hashes: set[str] = set()
 
+    def update_sources(self, sources: list[NewsSource]) -> None:
+        """Replace the active source list (takes effect next cycle)."""
+        if sources:
+            self._sources = sources
+            logger.info(
+                "News collector: %d active feeds updated.",
+                len(sources),
+            )
+
     async def collect(self) -> list[Article]:
         """Fetch all feeds and return new, deduplicated articles."""
         articles: list[Article] = []
