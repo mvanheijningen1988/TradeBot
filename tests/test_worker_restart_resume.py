@@ -47,7 +47,8 @@ async def test_bot_runner_skip_stopped_status_on_restart_shutdown() -> None:
 
 
 @pytest.mark.asyncio
-async def test_bot_runner_does_not_cancel_strategy_on_restart_shutdown() -> None:
+async def test_bot_runner_does_not_cancel_strategy_on_restart_shutdown(
+) -> None:
     """Runner finalization should skip strategy.stop during worker restart."""
     client = SimpleNamespace(
         send_bot_status=AsyncMock(),

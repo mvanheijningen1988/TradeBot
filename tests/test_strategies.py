@@ -2,7 +2,6 @@
 
 import pytest
 
-from manager.strategies.base import StrategyConfig
 from manager.strategies.dca import DCAStrategy
 from manager.strategies.grid_trading import GridStrategy
 from manager.strategies.martingale import MartingaleStrategy

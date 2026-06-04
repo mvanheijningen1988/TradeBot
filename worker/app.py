@@ -164,7 +164,7 @@ class WorkerApp:
     async def stop(self) -> None:
         """Stop all bots and disconnect."""
         self._running = False
-        for bot_id, runner in list(self._runners.items()):
+        for bot_id, runner in self._runners.items():
             await runner.stop(report_stopped=False, cancel_strategy=False)
         self._runners.clear()
         if self._client:
@@ -181,7 +181,7 @@ class WorkerApp:
                 await self._client.send_heartbeat()
                 await asyncio.sleep(10)
         except asyncio.CancelledError:
-            pass
+            raise
         except Exception:
             logger.exception("Heartbeat loop error.")
 
@@ -202,7 +202,7 @@ class WorkerApp:
 
                 await self._handle_message(msg)
         except asyncio.CancelledError:
-            pass
+            raise
         except Exception:
             logger.exception("Receive loop error.")
 
@@ -210,7 +210,7 @@ class WorkerApp:
         """Route an incoming manager message."""
         msg_type = msg.get("type")
 
-        if msg_type == WS_TYPE_START_BOT:
+        if msg_type in (WS_TYPE_START_BOT, WS_TYPE_ASSIGN):
             bot_id = msg.get("bot_id")
             bot_config = msg.get("config", {})
             await self._start_bot(bot_id, bot_config)
@@ -218,11 +218,6 @@ class WorkerApp:
         elif msg_type == WS_TYPE_STOP_BOT:
             bot_id = msg.get("bot_id")
             await self._stop_bot(bot_id)
-
-        elif msg_type == WS_TYPE_ASSIGN:
-            bot_id = msg.get("bot_id")
-            bot_config = msg.get("config", {})
-            await self._start_bot(bot_id, bot_config)
 
         elif msg_type == WS_TYPE_SET_LOG_LEVEL:
             category = msg.get("category", "*")

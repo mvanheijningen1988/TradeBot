@@ -10,6 +10,7 @@ balance to detect if unallocated funds have been moved externally.
 """
 
 import asyncio
+import contextlib
 import logging
 from typing import Optional
 
@@ -359,10 +360,8 @@ class WalletService:
         self._running = False
         if self._verify_task:
             self._verify_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._verify_task
-            except asyncio.CancelledError:
-                raise
 
     async def _verify_loop(self) -> None:
         """Periodically verify all wallets against exchange balances."""

@@ -85,7 +85,13 @@ async def delete_exchange(
     return {"detail": "Exchange removed."}
 
 
-@router.put("/{exchange_id}")
+@router.put(
+    "/{exchange_id}",
+    responses={
+        404: {"description": "Exchange not found."},
+        400: {"description": "No updatable fields provided."},
+    },
+)
 async def update_exchange(
     exchange_id: int,
     body: UpdateExchangeRequest,
@@ -104,7 +110,13 @@ async def update_exchange(
     return {"detail": "Exchange updated."}
 
 
-@router.get("/{exchange_id}/markets")
+@router.get(
+    "/{exchange_id}/markets",
+    responses={
+        404: {"description": "Exchange not found."},
+        502: {"description": "Exchange API unreachable."},
+    },
+)
 async def get_markets(
     exchange_id: int,
     request: Request,
@@ -139,7 +151,13 @@ async def get_markets(
     return result
 
 
-@router.get("/{exchange_id}/fees")
+@router.get(
+    "/{exchange_id}/fees",
+    responses={
+        404: {"description": "Exchange not found."},
+        502: {"description": "Exchange API unreachable."},
+    },
+)
 async def get_fees(
     exchange_id: int,
     request: Request,
@@ -213,7 +231,13 @@ async def get_balances(
         await client.disconnect()
 
 
-@router.get("/{exchange_id}/budget-available")
+@router.get(
+    "/{exchange_id}/budget-available",
+    responses={
+        404: {"description": "Exchange not found."},
+        502: {"description": "Exchange API unreachable."},
+    },
+)
 async def get_budget_available(
     exchange_id: int,
     quote: str,
@@ -270,7 +294,9 @@ async def _get_exchange_client(request: Request, exchange_id: int):
     """Create a temporary exchange client for data queries."""
     exchange = await request.app.state.exchange_repo.get_by_id(exchange_id)
     if not exchange:
-        raise HTTPException(status_code=404, detail="Exchange not found.")
+        raise HTTPException(  # NOSONAR
+            status_code=404, detail="Exchange not found."
+        )
 
     from manager.exchanges.bitvavo.client import BitvavoClient
 

@@ -1,12 +1,7 @@
 """Tests for the Bitvavo WebSocket client (unit tests with mocks)."""
 
-import asyncio
 import hashlib
 import hmac
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 
 from manager.exchanges.bitvavo.client import BitvavoClient
 from manager.models import OrderSide, OrderStatus, OrderType
@@ -36,7 +31,11 @@ class TestBitvavoSignature:
             api_key="testkey", api_secret="bitvavo"
         )
         sig = client._create_signature(1548175200641)
-        assert sig == "653fc0505431c63a043273da4bd2f0927eae83948d796084f313e5d1131b0d6f"
+        expected_sig = (
+            "653fc0505431c63a043273da4bd2f0927eae83948d796084"
+            "f313e5d1131b0d6f"
+        )
+        assert sig == expected_sig
 
 
 class TestBitvavoParser:

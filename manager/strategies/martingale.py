@@ -178,7 +178,7 @@ class MartingaleStrategy(Strategy):
             self._avg_entry_price,
             stop_price,
         )
-        await self._execute_sell_all(current_price)
+        await self._execute_sell_all()
         return True
 
     async def _handle_buy_in(self, current_price: Decimal) -> None:
@@ -322,7 +322,7 @@ class MartingaleStrategy(Strategy):
         except Exception:
             logger.exception("Martingale buy failed.")
 
-    async def _execute_sell_all(self, current_price: Decimal) -> None:
+    async def _execute_sell_all(self) -> None:
         """Market-sell the entire position (stop-loss)."""
         cfg = self._config
         if self._total_base <= 0:

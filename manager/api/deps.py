@@ -4,7 +4,7 @@ Provides the ``get_current_user`` dependency that validates the
 Authorization bearer token on every request.
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -12,12 +12,12 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 security = HTTPBearer()
 
 
-async def get_current_user(
+async def get_current_user(  # NOSONAR
     request: Request,
     credentials: Annotated[
         HTTPAuthorizationCredentials, Depends(security)
     ],
-) -> dict:
+) -> dict[str, Any]:
     """Validate JWT and return the authenticated user payload.
 
     Raises 401 if the token is missing, expired, or invalid.
@@ -32,9 +32,9 @@ async def get_current_user(
     return payload
 
 
-async def require_admin(
-    user: Annotated[dict, Depends(get_current_user)],
-) -> dict:
+async def require_admin(  # NOSONAR
+    user: Annotated[dict[str, Any], Depends(get_current_user)],
+) -> dict[str, Any]:
     """Ensure the authenticated user has the admin authorization role."""
     if user.get("role") != "admin":
         raise HTTPException(

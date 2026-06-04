@@ -27,7 +27,11 @@ async def list_workers(
     return await request.app.state.worker_service.list_workers()
 
 
-@router.post("/register", status_code=201)
+@router.post(
+    "/register",
+    status_code=201,
+    responses={403: {"description": "Worker registration rejected."}},
+)
 async def register_worker(
     body: RegisterWorkerRequest,
     request: Request,

@@ -1,8 +1,6 @@
 """Tests for the manager services and API layer."""
 
-import asyncio
 import os
-import tempfile
 
 import pytest
 
@@ -38,7 +36,8 @@ async def db():
 @pytest.fixture
 def config():
     """Provide a config object with deterministic JWT secret for tests."""
-    os.environ["TRADEBOT_JWT_SECRET"] = "test-secret-key-12345678901234567890abcd"
+    jwt_secret = "test-secret-key-12345678901234567890abcd"
+    os.environ["TRADEBOT_JWT_SECRET"] = jwt_secret
     cfg = load_config()
     os.environ.pop("TRADEBOT_JWT_SECRET", None)
     return cfg
@@ -107,7 +106,7 @@ class TestAuthService:
         user = await auth.authenticate("testuser", "wrongpassword")
         assert user is None
 
-    async def test_token_roundtrip(self, config, repos):
+    def test_token_roundtrip(self, config, repos):
         """Create and verify a token to validate payload roundtrip."""
         auth = AuthService(config, repos["user"])
         token = auth.create_access_token(1, "admin")
@@ -116,7 +115,7 @@ class TestAuthService:
         assert payload["sub"] == "1"
         assert payload["role"] == "admin"
 
-    async def test_verify_invalid_token(self, config, repos):
+    def test_verify_invalid_token(self, config, repos):
         """Return None when token verification receives invalid input."""
         auth = AuthService(config, repos["user"])
         result = auth.verify_token("invalid.token.value")
@@ -172,7 +171,8 @@ class TestBotService:
 
         worker_svc = WorkerService(config, repos["worker"], repos["bot"])
         bot_svc = BotService(
-            repos["bot"], repos["order"], repos["trade"], worker_svc
+            repos["bot"], repos["order"], repos["trade"],
+            worker_svc, repos["exchange"]
         )
 
         bot = await bot_svc.create_bot(
@@ -193,7 +193,8 @@ class TestBotService:
         exchange_id = await repos["exchange"].create("bitvavo", "k", "s")
         worker_svc = WorkerService(config, repos["worker"], repos["bot"])
         bot_svc = BotService(
-            repos["bot"], repos["order"], repos["trade"], worker_svc
+            repos["bot"], repos["order"], repos["trade"],
+            worker_svc, repos["exchange"]
         )
 
         with pytest.raises(ValueError, match="Invalid profit_mode"):
@@ -212,7 +213,8 @@ class TestBotService:
         exchange_id = await repos["exchange"].create("bitvavo", "k", "s")
         worker_svc = WorkerService(config, repos["worker"], repos["bot"])
         bot_svc = BotService(
-            repos["bot"], repos["order"], repos["trade"], worker_svc
+            repos["bot"], repos["order"], repos["trade"],
+            worker_svc, repos["exchange"]
         )
 
         bot = await bot_svc.create_bot(
@@ -227,7 +229,8 @@ class TestBotService:
         exchange_id = await repos["exchange"].create("bitvavo", "k", "s")
         worker_svc = WorkerService(config, repos["worker"], repos["bot"])
         bot_svc = BotService(
-            repos["bot"], repos["order"], repos["trade"], worker_svc
+            repos["bot"], repos["order"], repos["trade"],
+            worker_svc, repos["exchange"]
         )
 
         await bot_svc.create_bot(
@@ -252,23 +255,26 @@ class TestWorkerService:
     async def test_register_worker(self, config, repos):
         """Register a new worker and verify initial pending state."""
         svc = WorkerService(config, repos["worker"], repos["bot"])
-        worker = await svc.register("agent-1", "192.168.1.1", "0.2.0")
+        addr = "192.168.1.1"  # NOSONAR
+        worker = await svc.register("agent-1", addr, "0.2.0")
         assert worker["agent_id"] == "agent-1"
         assert worker["status"] == "pending"
 
     async def test_register_rejected_worker_raises(self, config, repos):
         """Block re-registration attempts for workers marked rejected."""
         svc = WorkerService(config, repos["worker"], repos["bot"])
-        worker = await svc.register("agent-2", "192.168.1.2", "0.2.0")
+        addr = "192.168.1.2"  # NOSONAR
+        worker = await svc.register("agent-2", addr, "0.2.0")
         await svc.reject(worker["id"])
 
         with pytest.raises(PermissionError):
-            await svc.register("agent-2", "192.168.1.2", "0.2.0")
+            await svc.register("agent-2", addr, "0.2.0")
 
     async def test_approve_worker(self, config, repos):
         """Approve a worker and verify list output reflects approval."""
         svc = WorkerService(config, repos["worker"], repos["bot"])
-        worker = await svc.register("agent-3", "10.0.0.1", "0.2.0")
+        addr = "10.0.0.1"  # NOSONAR
+        worker = await svc.register("agent-3", addr, "0.2.0")
         await svc.approve(worker["id"])
 
         workers = await svc.list_workers()
@@ -278,7 +284,8 @@ class TestWorkerService:
     async def test_select_worker(self, config, repos):
         """Select an approved worker when one is available."""
         svc = WorkerService(config, repos["worker"], repos["bot"])
-        worker = await svc.register("agent-4", "10.0.0.2", "0.2.0")
+        addr = "10.0.0.2"  # NOSONAR
+        worker = await svc.register("agent-4", addr, "0.2.0")
         await svc.approve(worker["id"])
 
         selected = await svc.select_worker()

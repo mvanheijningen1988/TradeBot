@@ -1,6 +1,5 @@
 """Tests for the Bitvavo rate limiter."""
 
-import asyncio
 import time
 
 import pytest
@@ -77,41 +76,45 @@ class TestBitvavoRateLimiter:
         return BitvavoRateLimiter(max_points=10)
 
     @pytest.mark.asyncio
-    async def test_acquire_consumes_points(self, limiter):
-        """Consume one action and verify remaining points are reduced."""
+    async def test_acquire_consumes_points(
+        self, limiter: BitvavoRateLimiter
+    ) -> None:
         await limiter.acquire("privateCreateOrder")
         # 10 * 0.95 = 9 max, used 1 → 8 remaining.
         assert limiter.points_remaining == 8
 
     @pytest.mark.asyncio
-    async def test_acquire_multiple(self, limiter):
-        """Consume a heavier action and verify points accounting."""
+    async def test_acquire_multiple(self, limiter: BitvavoRateLimiter) -> None:
         await limiter.acquire("privateGetOrders")  # 5 points
         assert limiter.points_remaining == 4
 
     @pytest.mark.asyncio
-    async def test_get_weight_with_market(self, limiter):
-        """Return market-scoped weight when has_market is True."""
+    async def test_get_weight_with_market(
+        self, limiter: BitvavoRateLimiter
+    ) -> None:
         weight = limiter.get_weight("privateGetOrdersOpen", has_market=True)
         assert weight == 5
 
     @pytest.mark.asyncio
-    async def test_get_weight_without_market(self, limiter):
-        """Return all-market weight when has_market is False."""
+    async def test_get_weight_without_market(
+        self, limiter: BitvavoRateLimiter
+    ) -> None:
         weight = limiter.get_weight("privateGetOrdersOpen", has_market=False)
         assert weight == 100
 
     @pytest.mark.asyncio
-    async def test_get_weight_unknown_action(self, limiter):
-        """Default unknown actions to weight 1 for safe fallback."""
+    async def test_get_weight_unknown_action(
+        self, limiter: BitvavoRateLimiter
+    ) -> None:
         weight = limiter.get_weight("unknownAction")
         assert weight == 1  # defaults to 1
 
     @pytest.mark.asyncio
-    async def test_points_remaining_resets_after_window(self, limiter):
-        """Reset remaining budget when limiter window has elapsed."""
+    async def test_points_remaining_resets_after_window(
+        self, limiter: BitvavoRateLimiter
+    ) -> None:
         await limiter.acquire("privateGetOrders")  # 5 pts
         assert limiter.points_remaining == 4
         # Simulate window reset.
-        limiter._window_start = time.monotonic() - 2.0
+        limiter._window_start = time.monotonic() - 2.0  # type: ignore
         assert limiter.points_remaining == 9  # full budget
