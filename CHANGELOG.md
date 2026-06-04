@@ -50,6 +50,13 @@ All notable changes to this project will be documented in this file.
 - Exchange balance failures are visible in both dashboard and diagnostics logs.
 - Fixed Bitvavo client authentication recursion in `_send_action()` that
   could cause timeouts and unavailable exchange balances.
+- Cleared final static-analysis blockers from the recent strategy/exchange
+  update:
+  - Reduced `MartingaleStrategy.on_tick()` complexity by splitting stop-loss,
+    buy-in, and take-profit logic into focused helper methods.
+  - Tightened exchange cancel order return types to
+    `dict[str, Any]`/`list[dict[str, Any]]` to satisfy strict typing.
+  - Added UI TypeScript `rootDir` in `ui/tsconfig.json` for TS 6 compatibility.
 - Timestamp rendering consistency in major UI diagnostics/dashboard/worker views.
 - Docker Compose manager JWT secret now defaults to a stable value for
   local development to reduce token invalidation after restarts.

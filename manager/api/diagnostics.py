@@ -3,7 +3,6 @@
 Provides system stats, log access, and log level management.
 """
 
-import os
 import platform
 from typing import Annotated, Optional
 
@@ -89,10 +88,14 @@ async def set_log_level(
         "category": body.category,
         "level": body.level.upper(),
     })
-    return {"detail": f"Log level for '{body.category}' set to '{body.level}'."}
+    msg = f"Log level for '{body.category}' set to '{body.level}'."
+    return {"detail": msg}
 
 
-@router.delete("/log-level/{category}")
+@router.delete(
+    "/log-level/{category}",
+    responses={404: {"description": "No override for category"}},
+)
 async def remove_log_level(
     category: str,
     request: Request,
@@ -103,8 +106,9 @@ async def remove_log_level(
     if not removed:
         from fastapi import HTTPException
         raise HTTPException(
-            status_code=404, 
-            detail=f"No override for '{category}' or cannot remove.")
+            status_code=404,
+            detail=f"No override for '{category}' or cannot remove.",
+        )
     # Propagate reset to all connected workers.
     await ws_manager.broadcast_workers({
         "type": WS_TYPE_SET_LOG_LEVEL,

@@ -144,7 +144,8 @@ class DCAStrategy(Strategy):
                     break
 
                 # Check remaining budget.
-                remaining = Decimal(str(self._config.budget_quote)) - self._total_spent
+                budget = Decimal(str(self._config.budget_quote))
+                remaining = budget - self._total_spent
                 if remaining < Decimal(str(self._config.amount_per_order)):
                     logger.info("DCA budget exhausted, stopping.")
                     self._state = StrategyState.STOPPED

@@ -57,11 +57,11 @@ class BotService:
         exchange_id: int,
         market: str,
         strategy: str,
-        strategy_params: dict,
+        strategy_params: dict[str, Any],
         budget_quote: float,
         profit_mode: str = "withdraw",
         profit_skim_pct: float = 0.0,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Create a new bot in stopped state."""
         if profit_mode not in PROFIT_MODES:
             raise ValueError(
@@ -89,7 +89,7 @@ class BotService:
 
     async def start_bot(
         self, bot_id: int, worker_id: Optional[int] = None
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Start a bot by assigning it to a worker."""
         bot = await self._bot_repo.get_by_id(bot_id)
         if not bot:
@@ -105,7 +105,7 @@ class BotService:
             worker = await self._worker_service.select_worker()
             if not worker:
                 raise RuntimeError("No workers available.")
-            worker_id = worker["id"]
+            worker_id = int(worker["id"])
 
         await self._bot_repo.assign_worker(
             bot_id, worker_id, manual=manual
@@ -116,10 +116,14 @@ class BotService:
             bot_id, worker_id, manual,
         )
 
+        if not bot:
+            raise RuntimeError(f"Bot {bot_id} disappeared after assignment.")
         await self._dispatch_assign(bot, worker_id)
         return bot
 
-    async def _dispatch_assign(self, bot: dict, worker_id: int) -> None:
+    async def _dispatch_assign(
+        self, bot: dict[str, Any], worker_id: int
+    ) -> None:
         """Send assign command for a bot to a worker."""
         exchange = await self._exchange_repo.get_by_id(bot["exchange_id"])
         if not exchange:
@@ -295,54 +299,7 @@ class BotService:
 
         # Cancel all open orders on the exchange.
         if mode != "delete_only":
-            try:
-                exchange = await self._exchange_repo.get_by_id(
-                    bot["exchange_id"]
-                )
-                if exchange:
-                    from manager.exchanges.bitvavo.client import BitvavoClient
-
-                    client = BitvavoClient(
-                        api_key=exchange["api_key"],
-                        api_secret=exchange["api_secret"],
-                    )
-                    await client.connect()
-                    await client.authenticate()
-                    try:
-                        open_orders = await client.get_open_orders(
-                            market=bot["market"]
-                        )
-                        cancelled = 0
-                        for order in open_orders:
-                            # Only cancel orders belonging to this bot.
-                            if (
-                                order.operator_id is not None
-                                and order.operator_id != bot["operator_id"]
-                            ):
-                                continue
-                            try:
-                                await client.cancel_order(
-                                    market=bot["market"],
-                                    order_id=order.order_id,
-                                    operator_id=bot["operator_id"],
-                                )
-                                cancelled += 1
-                            except Exception:
-                                logger.warning(
-                                    "Failed to cancel order %s",
-                                    order.order_id,
-                                )
-                        logger.info(
-                            "Cancelled %d exchange orders for bot %d.",
-                            cancelled, bot_id,
-                        )
-                    finally:
-                        await client.disconnect()
-            except Exception:
-                logger.exception(
-                    "Error cancelling exchange orders for bot %d.",
-                    bot_id,
-                )
+            await self._cancel_exchange_orders(bot, bot_id)
 
         # Delete trade history before order history to satisfy FK
         # from trade_history.order_history_id -> order_history.id.
@@ -353,16 +310,68 @@ class BotService:
         await self._bot_repo.delete(bot_id)
         logger.info("Bot %d deleted (mode=%s).", bot_id, mode)
 
-    async def update_bot(self, bot_id: int, **fields: Any) -> dict:
+    async def _cancel_exchange_orders(
+        self, bot: dict[str, Any], bot_id: int
+    ) -> None:
+        """Cancel all open exchange orders belonging to a bot."""
+        try:
+            exchange = await self._exchange_repo.get_by_id(
+                bot["exchange_id"]
+            )
+            if not exchange:
+                return
+            from manager.exchanges.bitvavo.client import BitvavoClient
+            client = BitvavoClient(
+                api_key=exchange["api_key"],
+                api_secret=exchange["api_secret"],
+            )
+            await client.connect()
+            await client.authenticate()
+            try:
+                open_orders = await client.get_open_orders(
+                    market=bot["market"]
+                )
+                cancelled = 0
+                for order in open_orders:
+                    if (
+                        order.operator_id is not None
+                        and order.operator_id != bot["operator_id"]
+                    ):
+                        continue
+                    try:
+                        await client.cancel_order(
+                            market=bot["market"],
+                            order_id=order.order_id,
+                            operator_id=bot["operator_id"],
+                        )
+                        cancelled += 1
+                    except Exception:
+                        logger.warning(
+                            "Failed to cancel order %s",
+                            order.order_id,
+                        )
+                logger.info(
+                    "Cancelled %d exchange orders for bot %d.",
+                    cancelled, bot_id,
+                )
+            finally:
+                await client.disconnect()
+        except Exception:
+            logger.exception(
+                "Error cancelling exchange orders for bot %d.",
+                bot_id,
+            )
+
+    async def update_bot(self, bot_id: int, **fields: Any) -> dict[str, Any]:
         """Update bot fields."""
         await self._bot_repo.update(bot_id, **fields)
         return await self._bot_repo.get_by_id(bot_id)
 
-    async def get_bot(self, bot_id: int) -> Optional[dict]:
+    async def get_bot(self, bot_id: int) -> Optional[dict[str, Any]]:
         """Get a single bot by ID."""
         return await self._bot_repo.get_by_id(bot_id)
 
-    async def list_bots(self) -> list[dict]:
+    async def list_bots(self) -> list[dict[str, Any]]:
         """List all bots."""
         return await self._bot_repo.list_all()
 
@@ -401,9 +410,21 @@ class BotService:
                 result.append({
                     "exchange_order_id": o.order_id,
                     "market": o.market,
-                    "side": o.side.value if hasattr(o.side, "value") else str(o.side),
-                    "order_type": o.order_type.value if hasattr(o.order_type, "value") else str(o.order_type),
-                    "status": o.status.value if hasattr(o.status, "value") else str(o.status),
+                    "side": (
+                        o.side.value
+                        if hasattr(o.side, "value")
+                        else str(o.side)
+                    ),
+                    "order_type": (
+                        o.order_type.value
+                        if hasattr(o.order_type, "value")
+                        else str(o.order_type)
+                    ),
+                    "status": (
+                        o.status.value
+                        if hasattr(o.status, "value")
+                        else str(o.status)
+                    ),
                     "amount": o.amount or "",
                     "amount_remaining": o.amount_remaining or "",
                     "price": o.price or "",

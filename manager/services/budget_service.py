@@ -8,9 +8,11 @@ soft limits.
 
 import logging
 from decimal import Decimal
-from typing import Optional
 
-from manager.database.repositories import BotRepository, BudgetHistoryRepository
+from manager.database.repositories import (
+    BotRepository,
+    BudgetHistoryRepository,
+)
 
 logger = logging.getLogger(__name__)
 

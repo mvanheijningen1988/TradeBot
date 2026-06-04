@@ -62,7 +62,7 @@ async def create_bot(
     )
 
 
-@router.get("/{bot_id}")
+@router.get("/{bot_id}", responses={404: {"description": "Bot not found"}})
 async def get_bot(
     bot_id: int,
     request: Request,
@@ -75,7 +75,10 @@ async def get_bot(
     return bot
 
 
-@router.put("/{bot_id}")
+@router.put(
+    "/{bot_id}",
+    responses={400: {"description": "No updatable fields provided"}},
+)
 async def update_bot(
     bot_id: int,
     body: UpdateBotRequest,

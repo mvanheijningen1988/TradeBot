@@ -7,15 +7,12 @@ from typing import Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from manager.constants import (
-    WS_TYPE_ASSIGN,
     WS_TYPE_BOT_LOG,
     WS_TYPE_BOT_STATUS,
     WS_TYPE_ERROR,
     WS_TYPE_HEARTBEAT,
     WS_TYPE_ORDER_UPDATE,
-    WS_TYPE_START_BOT,
     WS_TYPE_STATUS,
-    WS_TYPE_STOP_BOT,
     WS_TYPE_WORKER_LOG,
 )
 
@@ -204,135 +201,162 @@ async def _handle_worker_message(
     app: Any, agent_id: str, msg_type: str, msg: dict
 ) -> None:
     """Route incoming worker messages."""
-    bot_svc = app.state.bot_service
-    log_svc = app.state.log_service
-
     if msg_type == WS_TYPE_HEARTBEAT:
         await app.state.worker_service.heartbeat(agent_id)
-
     elif msg_type == WS_TYPE_BOT_STATUS:
-        bot_id = msg.get("bot_id")
-        status = msg.get("status")
-        if bot_id and status:
-            await bot_svc.update_bot_status(bot_id, status)
-            await manager.broadcast_ui(
-                {"type": WS_TYPE_STATUS, "bot_id": bot_id, "status": status}
-            )
-            worker = await app.state.worker_service._worker_repo.get_by_agent_id(
-                agent_id
-            )
-            wid = worker["id"] if worker else None
-            if log_svc.should_log("bot", "INFO"):
-                await log_svc.persist(
-                    category="bot",
-                    message=f"Bot {bot_id} status changed to {status}",
-                    level="INFO",
-                    subcategory="status",
-                    bot_id=bot_id,
-                    worker_id=wid,
-                )
-
+        await _handle_bot_status(app, agent_id, msg)
     elif msg_type == WS_TYPE_BOT_LOG:
-        worker = await app.state.worker_service._worker_repo.get_by_agent_id(
-            agent_id
-        )
-        wid = worker["id"] if worker else None
-        msg_level = msg.get("level", "INFO")
-        if log_svc.should_log("bot", msg_level):
-            await log_svc.persist(
-                category="bot",
-                message=msg.get("message", ""),
-                level=msg_level,
-                subcategory=msg.get("subcategory", ""),
-                correlation_id=msg.get("correlation_id"),
-                bot_id=msg.get("bot_id"),
-                worker_id=wid,
-            )
-        # Forward to UI with worker_id included.
-        msg["worker_id"] = wid
-        await manager.broadcast_ui(msg)
-
+        await _handle_bot_log(app, agent_id, msg)
     elif msg_type == WS_TYPE_WORKER_LOG:
-        worker = await app.state.worker_service._worker_repo.get_by_agent_id(
-            agent_id
-        )
-        wid = worker["id"] if worker else None
-        msg_level = msg.get("level", "INFO")
-        if log_svc.should_log("worker", msg_level):
-            await log_svc.persist(
-                category="worker",
-                message=msg.get("message", ""),
-                level=msg_level,
-                subcategory=msg.get("subcategory", ""),
-                correlation_id=msg.get("correlation_id"),
-                worker_id=wid,
-            )
-        # Forward to UI for live streaming.
-        fwd = {
-            "type": WS_TYPE_BOT_LOG,
-            "category": "worker",
-            "subcategory": msg.get("subcategory", ""),
-            "level": msg_level,
-            "message": msg.get("message", ""),
-            "worker_id": wid,
-            "correlation_id": msg.get("correlation_id"),
-        }
-        await manager.broadcast_ui(fwd)
-
+        await _handle_worker_log(app, agent_id, msg)
     elif msg_type == WS_TYPE_ERROR:
-        bot_id = msg.get("bot_id")
-        error_msg = msg.get("message", "Unknown error")
-        if bot_id:
-            await bot_svc.report_fault(bot_id)
-        logger.error(
-            "Worker %s error: %s", agent_id, error_msg
-        )
-        worker = await app.state.worker_service._worker_repo.get_by_agent_id(
-            agent_id
-        )
-        wid = worker["id"] if worker else None
-        if log_svc.should_log("bot", "ERROR"):
-            await log_svc.persist(
-                category="bot",
-                message=error_msg,
-                level="ERROR",
-                subcategory="fault",
-                bot_id=bot_id,
-                worker_id=wid,
-            )
-
+        await _handle_worker_error(app, agent_id, msg)
     elif msg_type == WS_TYPE_ORDER_UPDATE:
-        bot_id = msg.get("bot_id")
-        if bot_id:
-            bot = await bot_svc.get_bot(bot_id)
-            if not bot:
-                logger.warning(
-                    "Ignoring order_update for unknown bot_id=%s",
-                    bot_id,
-                )
-                return
-            order_id = await app.state.order_repo.create(
-                bot_id=bot_id,
-                exchange_order_id=msg.get("exchange_order_id", ""),
-                market=msg.get("market", ""),
-                side=msg.get("side", ""),
-                order_type=msg.get("order_type", ""),
-                status=msg.get("status", "new"),
-                amount=msg.get("amount"),
-                price=msg.get("price"),
-            )
-            await manager.broadcast_ui({
-                "type": WS_TYPE_ORDER_UPDATE,
-                "bot_id": bot_id,
-                "order": {
-                    "id": order_id,
-                    "bot_id": bot_id,
-                    "exchange_order_id": msg.get("exchange_order_id", ""),
-                    "market": msg.get("market", ""),
-                    "side": msg.get("side", ""),
-                    "order_type": msg.get("order_type", ""),
-                    "status": msg.get("status", "new"),
-                    "amount": msg.get("amount", ""),
-                    "price": msg.get("price", ""),
-                },
-            })
+        await _handle_order_update(app, msg)
+
+
+async def _handle_bot_status(
+    app: Any, agent_id: str, msg: dict
+) -> None:
+    """Process WS_TYPE_BOT_STATUS messages from a worker."""
+    bot_svc = app.state.bot_service
+    log_svc = app.state.log_service
+    bot_id = msg.get("bot_id")
+    status = msg.get("status")
+    if not (bot_id and status):
+        return
+    await bot_svc.update_bot_status(bot_id, status)
+    await manager.broadcast_ui(
+        {"type": WS_TYPE_STATUS, "bot_id": bot_id, "status": status}
+    )
+    worker_repo = app.state.worker_service._worker_repo
+    worker = await worker_repo.get_by_agent_id(agent_id)
+    wid = worker["id"] if worker else None
+    if log_svc.should_log("bot", "INFO"):
+        await log_svc.persist(
+            category="bot",
+            message=f"Bot {bot_id} status changed to {status}",
+            level="INFO",
+            subcategory="status",
+            bot_id=bot_id,
+            worker_id=wid,
+        )
+
+
+async def _handle_bot_log(
+    app: Any, agent_id: str, msg: dict
+) -> None:
+    """Process WS_TYPE_BOT_LOG messages from a worker."""
+    log_svc = app.state.log_service
+    worker_repo = app.state.worker_service._worker_repo
+    worker = await worker_repo.get_by_agent_id(agent_id)
+    wid = worker["id"] if worker else None
+    msg_level = msg.get("level", "INFO")
+    if log_svc.should_log("bot", msg_level):
+        await log_svc.persist(
+            category="bot",
+            message=msg.get("message", ""),
+            level=msg_level,
+            subcategory=msg.get("subcategory", ""),
+            correlation_id=msg.get("correlation_id"),
+            bot_id=msg.get("bot_id"),
+            worker_id=wid,
+        )
+    msg["worker_id"] = wid
+    await manager.broadcast_ui(msg)
+
+
+async def _handle_worker_log(
+    app: Any, agent_id: str, msg: dict
+) -> None:
+    """Process WS_TYPE_WORKER_LOG messages from a worker."""
+    log_svc = app.state.log_service
+    worker_repo = app.state.worker_service._worker_repo
+    worker = await worker_repo.get_by_agent_id(agent_id)
+    wid = worker["id"] if worker else None
+    msg_level = msg.get("level", "INFO")
+    if log_svc.should_log("worker", msg_level):
+        await log_svc.persist(
+            category="worker",
+            message=msg.get("message", ""),
+            level=msg_level,
+            subcategory=msg.get("subcategory", ""),
+            correlation_id=msg.get("correlation_id"),
+            worker_id=wid,
+        )
+    fwd = {
+        "type": WS_TYPE_BOT_LOG,
+        "category": "worker",
+        "subcategory": msg.get("subcategory", ""),
+        "level": msg_level,
+        "message": msg.get("message", ""),
+        "worker_id": wid,
+        "correlation_id": msg.get("correlation_id"),
+    }
+    await manager.broadcast_ui(fwd)
+
+
+async def _handle_worker_error(
+    app: Any, agent_id: str, msg: dict
+) -> None:
+    """Process WS_TYPE_ERROR messages from a worker."""
+    bot_svc = app.state.bot_service
+    log_svc = app.state.log_service
+    bot_id = msg.get("bot_id")
+    error_msg = msg.get("message", "Unknown error")
+    if bot_id:
+        await bot_svc.report_fault(bot_id)
+    logger.error("Worker %s error: %s", agent_id, error_msg)
+    worker_repo = app.state.worker_service._worker_repo
+    worker = await worker_repo.get_by_agent_id(agent_id)
+    wid = worker["id"] if worker else None
+    if log_svc.should_log("bot", "ERROR"):
+        await log_svc.persist(
+            category="bot",
+            message=error_msg,
+            level="ERROR",
+            subcategory="fault",
+            bot_id=bot_id,
+            worker_id=wid,
+        )
+
+
+async def _handle_order_update(
+    app: Any, msg: dict
+) -> None:
+    """Process WS_TYPE_ORDER_UPDATE messages from a worker."""
+    bot_svc = app.state.bot_service
+    bot_id = msg.get("bot_id")
+    if not bot_id:
+        return
+    bot = await bot_svc.get_bot(bot_id)
+    if not bot:
+        logger.warning(
+            "Ignoring order_update for unknown bot_id=%s", bot_id
+        )
+        return
+    order_id = await app.state.order_repo.create(
+        bot_id=bot_id,
+        exchange_order_id=msg.get("exchange_order_id", ""),
+        market=msg.get("market", ""),
+        side=msg.get("side", ""),
+        order_type=msg.get("order_type", ""),
+        status=msg.get("status", "new"),
+        amount=msg.get("amount"),
+        price=msg.get("price"),
+    )
+    await manager.broadcast_ui({
+        "type": WS_TYPE_ORDER_UPDATE,
+        "bot_id": bot_id,
+        "order": {
+            "id": order_id,
+            "bot_id": bot_id,
+            "exchange_order_id": msg.get("exchange_order_id", ""),
+            "market": msg.get("market", ""),
+            "side": msg.get("side", ""),
+            "order_type": msg.get("order_type", ""),
+            "status": msg.get("status", "new"),
+            "amount": msg.get("amount", ""),
+            "price": msg.get("price", ""),
+        },
+    })

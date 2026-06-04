@@ -5,7 +5,7 @@ its abstract methods. This ensures strategies remain exchange-agnostic.
 """
 
 import abc
-from typing import Optional
+from typing import Any, Optional
 
 from manager.models import (
     AccountFees,
@@ -135,13 +135,13 @@ class ExchangeClient(abc.ABC):
         order_id: str,
         operator_id: int,
         client_order_id: Optional[str] = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Cancel a single order."""
 
     @abc.abstractmethod
     async def cancel_orders(
         self, market: str, operator_id: int
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Cancel all orders for a market."""
 
     # ── Account ──────────────────────────────────────────────────

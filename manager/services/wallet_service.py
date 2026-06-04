@@ -11,7 +11,6 @@ balance to detect if unallocated funds have been moved externally.
 
 import asyncio
 import logging
-from decimal import Decimal
 from typing import Optional
 
 from manager.database.repositories import WalletRepository
@@ -114,11 +113,12 @@ class WalletService:
         wallet = await self.get_or_create(exchange_id, quote_currency)
         new_balance = wallet["balance"] + amount
         await self._repo.update_balance(wallet["id"], new_balance)
+        currency = wallet["quote_currency"]
         await self._repo.add_transaction(
             wallet["id"],
             tx_type="deposit",
             amount=amount,
-            description=f"Virtual deposit of {amount} {wallet['quote_currency']}",
+            description=f"Virtual deposit of {amount} {currency}",
         )
         logger.info(
             "Wallet %d: deposited %.2f %s (new balance: %.2f).",
@@ -154,11 +154,12 @@ class WalletService:
 
         new_balance = wallet["balance"] - amount
         await self._repo.update_balance(wallet["id"], new_balance)
+        currency = wallet["quote_currency"]
         await self._repo.add_transaction(
             wallet["id"],
             tx_type="withdraw",
             amount=-amount,
-            description=f"Virtual withdrawal of {amount} {wallet['quote_currency']}",
+            description=f"Virtual withdrawal of {amount} {currency}",
         )
         logger.info(
             "Wallet %d: withdrew %.2f %s (new balance: %.2f).",
@@ -361,7 +362,7 @@ class WalletService:
             try:
                 await self._verify_task
             except asyncio.CancelledError:
-                pass
+                raise
 
     async def _verify_loop(self) -> None:
         """Periodically verify all wallets against exchange balances."""
@@ -375,7 +376,7 @@ class WalletService:
                     if wallet:
                         await self.verify_against_exchange(ex["id"])
             except Exception as exc:
-                logger.error(
+                logger.exception(
                     "Wallet verification cycle failed: %s", exc
                 )
 
@@ -388,4 +389,4 @@ class WalletService:
             for w in all_wallets:
                 await self._record_snapshot(w["id"])
         except Exception as exc:
-            logger.error("Wallet snapshot cycle failed: %s", exc)
+            logger.exception("Wallet snapshot cycle failed: %s", exc)

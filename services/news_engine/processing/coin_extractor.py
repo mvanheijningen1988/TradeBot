@@ -6,7 +6,6 @@ and ambiguous-symbol guard logic per the specification.
 
 import logging
 import re
-from typing import Optional
 
 from services.news_engine.config.coin_map import CoinMap
 

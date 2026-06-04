@@ -6,7 +6,6 @@ skipped and logged at DEBUG level per the specification.
 
 import logging
 import re
-import unicodedata
 
 from services.news_engine.signals.signal_models import Article, ParsedArticle
 

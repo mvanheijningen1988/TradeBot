@@ -6,7 +6,6 @@ monitoring, and load balancing of Worker Nodes.
 
 import asyncio
 import logging
-import time
 from typing import Any, Callable, Coroutine, Optional
 
 from manager.config import Config
@@ -131,7 +130,8 @@ class WorkerService:
         )
         await self._persist_log(
             "worker",
-            f"Worker {agent_id} registered from {address} v{version} (pending approval)",
+            f"Worker {agent_id} registered from {address}"
+            f" v{version} (pending approval)",
             worker_id=worker_id, subcategory="registration",
         )
         # Notify UI about new worker pending approval.
@@ -204,7 +204,10 @@ class WorkerService:
         """Send a command to a worker via its WebSocket connection."""
         worker = await self._worker_repo.get_by_id(worker_id)
         if not worker:
-            logger.error("Cannot send command: worker %d not found.", worker_id)
+            logger.error(
+                "Cannot send command: worker %d not found.",
+                worker_id,
+            )
             return False
         agent_id = worker["agent_id"]
         ws = self._connections.get(agent_id)
@@ -257,13 +260,16 @@ class WorkerService:
             await self._bot_repo.update(bot["id"], worker_id=None)
             await self._bot_repo.update_status(bot["id"], "stopped")
         await self._persist_log(
-            "worker", f"Worker {worker_id} removed, {len(bots)} bot(s) stopped",
-            level="WARNING", worker_id=worker_id, subcategory="lifecycle",
+            "worker",
+            f"Worker {worker_id} removed, {len(bots)} bot(s) stopped",
+            level="WARNING",
+            worker_id=worker_id,
+            subcategory="lifecycle",
         )
         await self._worker_repo.delete(worker_id)
         logger.info("Worker %d removed, bots stopped.", worker_id)
 
-    async def start_health_monitor(self) -> None:
+    def start_health_monitor(self) -> None:
         """Start the background health check loop."""
         self._health_task = asyncio.create_task(self._health_loop())
 
@@ -274,7 +280,7 @@ class WorkerService:
             try:
                 await self._health_task
             except asyncio.CancelledError:
-                pass
+                raise
 
     async def _health_loop(self) -> None:
         """Periodically check worker heartbeats."""

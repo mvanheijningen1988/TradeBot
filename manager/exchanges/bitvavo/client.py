@@ -170,13 +170,7 @@ class BitvavoClient(ExchangeClient):
             The parsed JSON response dict.
         """
         for attempt in range(2):
-            if self._ws is None:
-                await self.connect()
-
-            # Authenticate lazily for private actions, but avoid recursion
-            # while sending the authenticate action itself.
-            if action != "authenticate" and not self._authenticated:
-                await self.authenticate()
+            await self._ensure_action_ready(action)
 
             if rate_limit:
                 await self._rate_limiter.acquire(action, has_market)
@@ -193,18 +187,18 @@ class BitvavoClient(ExchangeClient):
             logger.debug("WS SEND [%d]: %s", request_id, action)
 
             try:
-                await self._ws.send(message)
-                response = await asyncio.wait_for(future, timeout=30.0)
+                response = await self._send_and_wait(
+                    message=message,
+                    future=future,
+                    request_id=request_id,
+                    action=action,
+                )
             except websockets.ConnectionClosed as exc:
                 self._pending.pop(request_id, None)
-                if attempt == 0:
-                    logger.warning(
-                        "Bitvavo WS disconnected during %s; reconnecting.",
-                        action,
-                    )
-                    self._ws = None
-                    self._authenticated = False
-                    await self.reconnect()
+                if await self._try_reconnect_after_disconnect(
+                    action=action,
+                    attempt=attempt,
+                ):
                     continue
                 raise ConnectionError(
                     f"Bitvavo websocket disconnected during {action}: {exc}"
@@ -215,15 +209,67 @@ class BitvavoClient(ExchangeClient):
                     f"Bitvavo request {action} (id={request_id}) timed out."
                 )
 
-            if "errorCode" in response:
-                raise RuntimeError(
-                    f"Bitvavo error {response['errorCode']}: "
-                    f"{response.get('error', 'unknown')}"
-                )
+            self._raise_response_error(response)
 
             return response
 
         raise ConnectionError(f"Failed to execute Bitvavo action {action}.")
+
+    async def _ensure_action_ready(self, action: str) -> None:
+        """Ensure WS connectivity and authentication before sending."""
+        if self._ws is None:
+            await self.connect()
+
+        if action != "authenticate" and not self._authenticated:
+            await self.authenticate()
+
+    async def _send_and_wait(
+        self,
+        message: str,
+        future: asyncio.Future,
+        request_id: int,
+        action: str,
+    ) -> dict[str, Any]:
+        """Send one message and wait for the correlated response."""
+        if self._ws is None:
+            raise ConnectionError("WebSocket is not connected.")
+
+        await self._ws.send(message)
+        response = await asyncio.wait_for(future, timeout=30.0)
+
+        if not isinstance(response, dict):
+            raise RuntimeError(
+                f"Unexpected response type for {action} (id={request_id})."
+            )
+        return response
+
+    async def _try_reconnect_after_disconnect(
+        self,
+        action: str,
+        attempt: int,
+    ) -> bool:
+        """Reconnect once after a disconnect and report retry eligibility."""
+        if attempt != 0:
+            return False
+
+        logger.warning(
+            "Bitvavo WS disconnected during %s; reconnecting.",
+            action,
+        )
+        self._ws = None
+        self._authenticated = False
+        await self.reconnect()
+        return True
+
+    @staticmethod
+    def _raise_response_error(response: dict[str, Any]) -> None:
+        """Raise exchange errors found in a response payload."""
+        if "errorCode" not in response:
+            return
+        raise RuntimeError(
+            f"Bitvavo error {response['errorCode']}: "
+            f"{response.get('error', 'unknown')}"
+        )
 
     async def _receive_loop(self) -> None:
         """Background task that dispatches incoming WebSocket messages."""
@@ -491,7 +537,7 @@ class BitvavoClient(ExchangeClient):
         order_id: str,
         operator_id: int,
         client_order_id: Optional[str] = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "market": market,
             "orderId": order_id,
@@ -504,7 +550,7 @@ class BitvavoClient(ExchangeClient):
 
     async def cancel_orders(
         self, market: str, operator_id: int
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         body: dict[str, Any] = {
             "market": market,
             "operatorId": operator_id,

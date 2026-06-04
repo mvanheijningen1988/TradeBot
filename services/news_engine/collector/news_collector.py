@@ -12,7 +12,10 @@ from email.utils import parsedate_to_datetime
 from typing import Any
 
 from services.news_engine.collector.rss_client import RssClient
-from services.news_engine.config.news_sources import DEFAULT_SOURCES, NewsSource
+from services.news_engine.config.news_sources import (
+    DEFAULT_SOURCES,
+    NewsSource,
+)
 from services.news_engine.signals.signal_models import Article
 
 logger = logging.getLogger(__name__)

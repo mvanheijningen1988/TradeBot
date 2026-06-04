@@ -5,7 +5,6 @@ the keyword-to-event-type mapping table defined in the SKILL.md.
 """
 
 import logging
-from typing import Any
 
 from services.news_engine.signals.signal_models import (
     DetectedEvent,

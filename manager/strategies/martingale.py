@@ -18,11 +18,9 @@ Reference:
     https://www.kucoin.com/support/31130050642329
 """
 
-import asyncio
 import logging
-import time
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal
 from typing import Any, Optional
 
 from manager.exchanges.base import ExchangeClient
@@ -153,65 +151,81 @@ class MartingaleStrategy(Strategy):
             return
 
         current_price = Decimal(price)
+        if await self._handle_stop_loss(current_price):
+            return
+
+        await self._handle_buy_in(current_price)
+        await self._handle_take_profit(current_price)
+
+    async def _handle_stop_loss(self, current_price: Decimal) -> bool:
+        """Execute stop-loss and report whether processing should stop."""
         cfg = self._config
+        if cfg.stop_loss_pct <= 0 or self._avg_entry_price <= 0:
+            return False
 
-        # Check stop-loss.
-        if cfg.stop_loss_pct > 0 and self._avg_entry_price > 0:
-            stop_price = self._avg_entry_price * (
-                1 - Decimal(str(cfg.stop_loss_pct)) / 100
-            )
-            if current_price <= stop_price:
-                logger.warning(
-                    "Martingale stop-loss triggered at %s (avg_entry=%s, "
-                    "stop=%s)",
-                    current_price,
-                    self._avg_entry_price,
-                    stop_price,
-                )
-                await self._execute_sell_all(current_price)
-                return
+        stop_price = self._avg_entry_price * (
+            1 - Decimal(str(cfg.stop_loss_pct)) / 100
+        )
+        if current_price > stop_price:
+            return False
 
-        # Check buy-in trigger.
-        if self._last_buy_price > 0:
-            trigger_price = self._last_buy_price * (
-                1 - Decimal(str(cfg.buy_in_trigger_pct)) / 100
-            )
-            if (
-                current_price <= trigger_price
-                and self._buy_in_count < cfg.max_buy_ins
-            ):
-                # Budget check.
-                next_amount = Decimal(str(cfg.initial_amount_quote)) * (
-                    Decimal(str(cfg.position_multiplier))
-                    ** self._buy_in_count
-                )
-                remaining = (
-                    Decimal(str(cfg.budget_quote)) - self._total_quote_spent
-                )
-                if next_amount <= remaining:
-                    logger.info(
-                        "Martingale buy-in #%d triggered at %s (trigger=%s)",
-                        self._buy_in_count + 1,
-                        current_price,
-                        trigger_price,
-                    )
-                    await self._execute_buy(next_amount)
-                else:
-                    logger.warning(
-                        "Martingale budget insufficient for buy-in #%d "
-                        "(need %s, have %s).",
-                        self._buy_in_count + 1,
-                        next_amount,
-                        remaining,
-                    )
+        logger.warning(
+            "Martingale stop-loss triggered at %s (avg_entry=%s, stop=%s)",
+            current_price,
+            self._avg_entry_price,
+            stop_price,
+        )
+        await self._execute_sell_all(current_price)
+        return True
 
-        # Check take-profit: place/update sell order.
-        if self._avg_entry_price > 0 and self._total_base > 0:
-            tp_price = self._avg_entry_price * (
-                1 + Decimal(str(cfg.take_profit_pct)) / 100
+    async def _handle_buy_in(self, current_price: Decimal) -> None:
+        """Place an additional buy when trigger and budget constraints pass."""
+        cfg = self._config
+        if self._last_buy_price <= 0 or self._buy_in_count >= cfg.max_buy_ins:
+            return
+
+        trigger_price = self._last_buy_price * (
+            1 - Decimal(str(cfg.buy_in_trigger_pct)) / 100
+        )
+        if current_price > trigger_price:
+            return
+
+        next_amount = Decimal(str(cfg.initial_amount_quote)) * (
+            Decimal(str(cfg.position_multiplier)) ** self._buy_in_count
+        )
+        remaining = Decimal(str(cfg.budget_quote)) - self._total_quote_spent
+        if next_amount > remaining:
+            logger.warning(
+                "Martingale budget insufficient for buy-in #%d "
+                "(need %s, have %s).",
+                self._buy_in_count + 1,
+                next_amount,
+                remaining,
             )
-            if current_price >= tp_price and self._sell_order_id is None:
-                await self._place_take_profit(tp_price)
+            return
+
+        logger.info(
+            "Martingale buy-in #%d triggered at %s (trigger=%s)",
+            self._buy_in_count + 1,
+            current_price,
+            trigger_price,
+        )
+        await self._execute_buy(next_amount)
+
+    async def _handle_take_profit(self, current_price: Decimal) -> None:
+        """Create a take-profit order once the target price is reached."""
+        if (
+            self._avg_entry_price <= 0
+            or self._total_base <= 0
+            or self._sell_order_id is not None
+        ):
+            return
+
+        tp_price = self._avg_entry_price * (
+            1 + Decimal(str(self._config.take_profit_pct)) / 100
+        )
+        if current_price >= tp_price:
+            await self._place_take_profit(tp_price)
 
     async def on_order_filled(self, order_id: str) -> None:
         """Handle fill events (mainly the take-profit sell)."""
@@ -264,7 +278,9 @@ class MartingaleStrategy(Strategy):
             )
 
             filled = Decimal(order.filled_amount or "0")
-            filled_quote = Decimal(order.filled_amount_quote or str(amount_quote))
+            filled_quote = Decimal(
+                order.filled_amount_quote or str(amount_quote)
+            )
 
             self._total_base += filled
             self._total_quote_spent += filled_quote

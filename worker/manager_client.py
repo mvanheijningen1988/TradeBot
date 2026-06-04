@@ -81,7 +81,10 @@ class ManagerClient:
             backoff = min(2 ** attempt, 30)
             await asyncio.sleep(backoff)
 
-        logger.error("Registration failed after %d attempts.", self._max_retries)
+        logger.error(
+            "Registration failed after %d attempts.",
+            self._max_retries,
+        )
         return False
 
     async def connect_ws(self) -> bool:
