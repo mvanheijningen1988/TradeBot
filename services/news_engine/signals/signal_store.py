@@ -47,6 +47,7 @@ class SignalStore:
                 investment_horizon TEXT NOT NULL DEFAULT 'unknown',
                 source      TEXT    NOT NULL,
                 article_url TEXT    NOT NULL,
+                article_summary TEXT NOT NULL DEFAULT '',
                 timestamp   TEXT    NOT NULL,
                 created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
             )
@@ -55,6 +56,10 @@ class SignalStore:
         await self._ensure_column("rsi_short", "REAL")
         await self._ensure_column("rsi_long", "REAL")
         await self._ensure_column("rsi_state", "TEXT")
+        await self._ensure_column(
+            "article_summary",
+            "TEXT NOT NULL DEFAULT ''",
+        )
         await self._ensure_column(
             "investment_horizon",
             "TEXT NOT NULL DEFAULT 'unknown'",
@@ -84,8 +89,9 @@ class SignalStore:
                 INSERT INTO news_signals
                     (coin, signal, score, confidence, reason,
                      event_type, rsi_short, rsi_long, rsi_state,
-                     investment_horizon, source, article_url, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     investment_horizon, source, article_url,
+                     article_summary, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     signal.coin,
@@ -100,6 +106,7 @@ class SignalStore:
                     signal.investment_horizon,
                     signal.source,
                     signal.article_url,
+                    signal.article_summary,
                     signal.timestamp.isoformat(),
                 ),
             )
@@ -133,8 +140,9 @@ class SignalStore:
                     INSERT INTO news_signals
                         (coin, signal, score, confidence, reason,
                          event_type, rsi_short, rsi_long, rsi_state,
-                         investment_horizon, source, article_url, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         investment_horizon, source, article_url,
+                         article_summary, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         signal.coin,
@@ -149,6 +157,7 @@ class SignalStore:
                         signal.investment_horizon,
                         signal.source,
                         signal.article_url,
+                        signal.article_summary,
                         signal.timestamp.isoformat(),
                     ),
                 )
@@ -186,7 +195,8 @@ class SignalStore:
             """
             SELECT coin, signal, score, confidence, reason,
                      event_type, rsi_short, rsi_long, rsi_state,
-                     investment_horizon, source, article_url, timestamp
+                     investment_horizon, source, article_url,
+                     article_summary, timestamp
             FROM news_signals
             ORDER BY id DESC
             LIMIT ?
@@ -195,49 +205,24 @@ class SignalStore:
         )
         return [dict(r) for r in rows]
 
-    def get_recommendations(self) -> dict:
-        """Get investment recommendations based on recent signals.
+    @staticmethod
+    def _normalize_signal_label(value: str) -> str:
+        """Normalize signal labels to support legacy underscore values."""
+        return (value or "").strip().lower().replace("_", " ")
 
-        Returns bullish coins to consider investing in and bearish
-        coins to consider removing from the portfolio.
-        """
+    @classmethod
+    def _build_recommendations(cls, items: list[dict]) -> dict:
+        """Build unique invest/remove recommendations from signal items."""
         invest: dict[str, dict] = {}
         remove: dict[str, dict] = {}
 
-        for signal in reversed(list(self._cache)):
-            coin = signal.coin
-            if signal.signal in ("bullish", "strong bullish"):
-                if coin not in invest:
-                    invest[coin] = {
-                        "coin": coin,
-                        "signal": signal.signal,
-                        "score": signal.score,
-                        "confidence": signal.confidence,
-                        "reason": signal.reason,
-                        "rsi_short": signal.rsi_short,
-                        "rsi_long": signal.rsi_long,
-                        "rsi_state": signal.rsi_state,
-                        "investment_horizon": signal.investment_horizon,
-                        "source": signal.source,
-                        "article_url": signal.article_url,
-                        "timestamp": signal.timestamp.isoformat(),
-                    }
-            elif signal.signal in ("bearish", "strong bearish"):
-                if coin not in remove:
-                    remove[coin] = {
-                        "coin": coin,
-                        "signal": signal.signal,
-                        "score": signal.score,
-                        "confidence": signal.confidence,
-                        "reason": signal.reason,
-                        "rsi_short": signal.rsi_short,
-                        "rsi_long": signal.rsi_long,
-                        "rsi_state": signal.rsi_state,
-                        "investment_horizon": signal.investment_horizon,
-                        "source": signal.source,
-                        "article_url": signal.article_url,
-                        "timestamp": signal.timestamp.isoformat(),
-                    }
+        for signal in items:
+            coin = signal["coin"]
+            label = cls._normalize_signal_label(signal["signal"])
+            if label in ("bullish", "strong bullish") and coin not in invest:
+                invest[coin] = signal
+            elif label in ("bearish", "strong bearish") and coin not in remove:
+                remove[coin] = signal
 
         return {
             "invest": sorted(
@@ -250,3 +235,34 @@ class SignalStore:
                 key=lambda x: x["score"],
             ),
         }
+
+    async def get_recommendations(self, limit: int = 300) -> dict:
+        """Return recommendations from cache with DB fallback.
+
+        Uses in-memory cache first for fresh real-time signals. If cache is
+        empty (e.g. directly after manager restart), it falls back to latest
+        persisted signals from the database.
+        """
+        cache_items = [
+            {
+                "coin": signal.coin,
+                "signal": signal.signal,
+                "score": signal.score,
+                "confidence": signal.confidence,
+                "reason": signal.reason,
+                "rsi_short": signal.rsi_short,
+                "rsi_long": signal.rsi_long,
+                "rsi_state": signal.rsi_state,
+                "investment_horizon": signal.investment_horizon,
+                "source": signal.source,
+                "article_url": signal.article_url,
+                "article_summary": signal.article_summary,
+                "timestamp": signal.timestamp.isoformat(),
+            }
+            for signal in reversed(list(self._cache))
+        ]
+        if cache_items:
+            return self._build_recommendations(cache_items)
+
+        db_items = await self.get_latest_from_db(limit=limit)
+        return self._build_recommendations(db_items)

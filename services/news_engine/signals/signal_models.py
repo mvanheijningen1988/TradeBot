@@ -93,6 +93,7 @@ class NewsSignal(BaseModel):
     reason: str
     source: str
     article_url: str
+    article_summary: str = ""
     timestamp: datetime
     event_type: Optional[str] = None
     rsi_short: Optional[float] = None

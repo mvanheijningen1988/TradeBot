@@ -11,6 +11,7 @@ Implements the complete step-by-step signal calculation algorithm:
 """
 
 import logging
+import re
 
 from services.news_engine.signals.signal_models import (
     EventDetectionResult,
@@ -20,6 +21,8 @@ from services.news_engine.signals.signal_models import (
 )
 
 logger = logging.getLogger(__name__)
+_SUMMARY_MAX_LEN = 240
+_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
 
 
 def _score_to_signal(score: float) -> str:
@@ -45,6 +48,46 @@ def _build_reason(events: EventDetectionResult) -> str:
         reverse=True,
     )
     return ", ".join(e.event_type for e in sorted_events)
+
+
+def _truncate_text(value: str, max_len: int = _SUMMARY_MAX_LEN) -> str:
+    """Trim text for compact UI display without cutting mid-word badly."""
+    value = value.strip()
+    if len(value) <= max_len:
+        return value
+
+    shortened = value[: max_len - 1].rsplit(" ", 1)[0].strip()
+    if not shortened:
+        shortened = value[: max_len - 1].strip()
+    return f"{shortened}..."
+
+
+def _build_article_summary(
+    article: ParsedArticle,
+    signal_label: str,
+) -> str:
+    """Create a short user-facing explanation from the article context."""
+    prefix = {
+        "bullish": "Positive context",
+        "bearish": "Negative context",
+    }.get(signal_label, "Market context")
+
+    title = article.title.strip()
+    context = article.text.strip()
+    if title and context.lower().startswith(title.lower()):
+        context = context[len(title):].strip(" .:-")
+
+    first_sentence = ""
+    if context:
+        parts = _SENTENCE_RE.split(context, maxsplit=1)
+        first_sentence = parts[0].strip()
+
+    if first_sentence and title and first_sentence.lower() != title.lower():
+        combined = f"{title}. {first_sentence}"
+    else:
+        combined = title or first_sentence or context
+
+    return f"{prefix}: {_truncate_text(combined)}"
 
 
 class SignalEngine:
@@ -115,6 +158,10 @@ class SignalEngine:
                 reason=reason,
                 source=article.source,
                 article_url=article.url,
+                article_summary=_build_article_summary(
+                    article,
+                    signal_label,
+                ),
                 timestamp=article.timestamp,
                 event_type=primary_event,
                 rsi_short=rsi_short,

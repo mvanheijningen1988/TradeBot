@@ -22,6 +22,9 @@ All notable changes to this project will be documented in this file.
   - Signals now include RSI(9), RSI(14), RSI state
     (`overbought`/`oversold`/`neutral`), and investment horizon hints
     (`long_term`, `short_term`, `both`, `avoid`, `unknown`).
+  - Signal tooltip now includes per-field info hints and a short
+    article-context summary that explains why the article reads as
+    positive, negative, or mixed.
 
 ### Changed
 - **Bot shutdown behavior during worker stop/restart**:
@@ -50,6 +53,11 @@ All notable changes to this project will be documented in this file.
 - Timestamp rendering consistency in major UI diagnostics/dashboard/worker views.
 - Docker Compose manager JWT secret now defaults to a stable value for
   local development to reduce token invalidation after restarts.
+- **Signals panel empty after restart**:
+  - Recommendations now fall back to persisted `news_signals` records
+    when in-memory signal cache is empty after manager restart.
+  - Signals panel now refreshes recommendations periodically so bullish/
+    bearish entries appear without requiring a full browser reload.
 
 ## [0.1.0] - 2026-06-02
 

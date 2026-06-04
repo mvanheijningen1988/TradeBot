@@ -11,6 +11,7 @@ export interface NewsSignal {
   reason: string;
   source: string;
   article_url: string;
+  article_summary: string;
   timestamp: string;
   event_type: string | null;
   rsi_short?: number | null;
@@ -27,6 +28,7 @@ export interface SignalRecommendation {
   reason: string;
   source: string;
   article_url: string;
+  article_summary: string;
   timestamp: string;
   rsi_short?: number | null;
   rsi_long?: number | null;

@@ -24,6 +24,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly signalsService = inject(SignalsService);
   private readonly router = inject(Router);
   private wsSub?: Subscription;
+  private signalsRefreshTimer?: ReturnType<typeof setInterval>;
 
   currentUser: User | null = null;
   pendingWorkers = 0;
@@ -58,6 +59,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
     });
 
     this.loadSignals();
+    this.signalsRefreshTimer = setInterval(() => {
+      this.loadSignals();
+    }, 30_000);
 
     this.wsService.connect();
     this.wsSub = this.wsService.messages.subscribe((msg) => {
@@ -95,6 +99,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.wsSub?.unsubscribe();
+    if (this.signalsRefreshTimer) {
+      clearInterval(this.signalsRefreshTimer);
+      this.signalsRefreshTimer = undefined;
+    }
   }
 
   logout(): void {

@@ -46,7 +46,7 @@ async def get_recommendations(
     coins with bearish signals (consider removing from wallet).
     """
     engine = _get_engine(request)
-    return engine.store.get_recommendations()
+    return await engine.store.get_recommendations()
 
 
 @router.get("/coin/{coin}")
