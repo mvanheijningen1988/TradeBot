@@ -76,10 +76,12 @@ class DCAStrategy(Strategy):
 
     @staticmethod
     def name() -> str:
+        """Return the registry key for this strategy."""
         return "dca"
 
     @staticmethod
     def description() -> str:
+        """Return a human-readable summary of the DCA behavior."""
         return (
             "Automates recurring fixed-amount buys at regular intervals "
             "to dollar-cost average into a position."
@@ -87,6 +89,7 @@ class DCAStrategy(Strategy):
 
     @staticmethod
     def default_parameters() -> dict[str, Any]:
+        """Return default configurable parameters for new DCA bots."""
         return {
             "amount_per_order": 0.0,
             "interval": "daily",
@@ -197,6 +200,7 @@ class DCAStrategy(Strategy):
         """No-op — DCA uses market orders which fill immediately."""
 
     def get_status(self) -> dict[str, Any]:
+        """Return runtime metrics for monitoring and UI dashboards."""
         avg_price = Decimal("0")
         if self._total_acquired > 0:
             avg_price = self._total_spent / self._total_acquired

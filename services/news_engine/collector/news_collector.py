@@ -112,5 +112,5 @@ class NewsCollector:
             )
 
     async def close(self) -> None:
-        """Release resources."""
+        """Close the underlying HTTP client and release network resources."""
         await self._client.close()

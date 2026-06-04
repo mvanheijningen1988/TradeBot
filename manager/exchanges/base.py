@@ -154,7 +154,7 @@ class ExchangeClient(abc.ABC):
     async def get_balance(
         self, symbol: Optional[str] = None
     ) -> list[Balance]:
-        """Return account balances."""
+        """Return account balances, optionally filtered by asset symbol."""
 
     # ── Subscriptions ────────────────────────────────────────────
 

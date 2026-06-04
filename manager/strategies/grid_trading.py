@@ -68,10 +68,12 @@ class GridStrategy(Strategy):
 
     @staticmethod
     def name() -> str:
+        """Return the registry key for this strategy."""
         return "grid_trading"
 
     @staticmethod
     def description() -> str:
+        """Return a human-readable summary of grid trading behavior."""
         return (
             "Places buy orders below and sell orders above the current "
             "price at fixed intervals to arbitrage within a price range."
@@ -79,6 +81,7 @@ class GridStrategy(Strategy):
 
     @staticmethod
     def default_parameters() -> dict[str, Any]:
+        """Return default configurable parameters for new grid bots."""
         return {
             "upper_price": 0.0,
             "lower_price": 0.0,
@@ -775,6 +778,7 @@ class GridStrategy(Strategy):
         return True
 
     def get_status(self) -> dict[str, Any]:
+        """Return current grid levels, open orders, and profit counters."""
         return {
             "strategy": self.name(),
             "state": self._state.value,

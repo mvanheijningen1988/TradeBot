@@ -17,6 +17,8 @@ router = APIRouter(prefix="/diagnostics", tags=["diagnostics"])
 
 
 class SetLogLevelRequest(BaseModel):
+    """Payload for changing log level overrides by category."""
+
     category: str
     level: str
 

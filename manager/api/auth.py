@@ -11,16 +11,22 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 class LoginRequest(BaseModel):
+    """Credentials payload used to request a JWT token."""
+
     username: str
     password: str
 
 
 class TokenResponse(BaseModel):
+    """Authentication response containing bearer token metadata."""
+
     access_token: str
     token_type: str = "bearer"
 
 
 class UserResponse(BaseModel):
+    """Safe user profile payload returned for authenticated sessions."""
+
     id: int
     username: str
     role: str

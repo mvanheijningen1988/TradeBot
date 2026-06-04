@@ -56,7 +56,7 @@ class MartingaleConfig(StrategyConfig):
 
 
 class MartingaleStrategy(Strategy):
-    """Martingale strategy implementation."""
+    """Martingale strategy implementation with averaging and rebound exits."""
 
     def __init__(
         self,
@@ -82,10 +82,12 @@ class MartingaleStrategy(Strategy):
 
     @staticmethod
     def name() -> str:
+        """Return the registry key for this strategy."""
         return "martingale"
 
     @staticmethod
     def description() -> str:
+        """Return a human-readable summary of Martingale behavior."""
         return (
             "Buys more on dips with increasing size to lower average "
             "entry, sells the full position on a small rebound."
@@ -93,6 +95,7 @@ class MartingaleStrategy(Strategy):
 
     @staticmethod
     def default_parameters() -> dict[str, Any]:
+        """Return default configurable parameters for new Martingale bots."""
         return {
             "initial_amount_quote": 0.0,
             "buy_in_trigger_pct": 2.0,
@@ -389,6 +392,7 @@ class MartingaleStrategy(Strategy):
             logger.exception("Failed to place take-profit order.")
 
     def get_status(self) -> dict[str, Any]:
+        """Return current position metrics and cycle counters."""
         return {
             "strategy": self.name(),
             "state": self._state.value,

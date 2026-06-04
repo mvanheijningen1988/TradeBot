@@ -11,6 +11,8 @@ router = APIRouter(prefix="/bots", tags=["bots"])
 
 
 class CreateBotRequest(BaseModel):
+    """Payload for creating a new bot and its runtime configuration."""
+
     name: str
     exchange_id: int
     market: str
@@ -22,6 +24,8 @@ class CreateBotRequest(BaseModel):
 
 
 class UpdateBotRequest(BaseModel):
+    """Payload for partial bot updates; omitted fields remain unchanged."""
+
     name: Optional[str] = None
     strategy_params: Optional[dict] = None
     budget_quote: Optional[float] = None
@@ -30,6 +34,8 @@ class UpdateBotRequest(BaseModel):
 
 
 class StartBotRequest(BaseModel):
+    """Payload for bot start requests with optional worker preference."""
+
     worker_id: Optional[int] = None
 
 
@@ -38,7 +44,7 @@ async def list_bots(
     request: Request,
     _user: Annotated[dict, Depends(get_current_user)],
 ):
-    """Return all bots."""
+    """Return all bots with persisted configuration and runtime status."""
     return await request.app.state.bot_service.list_bots()
 
 
@@ -99,7 +105,7 @@ async def start_bot(
     request: Request,
     _user: Annotated[dict, Depends(get_current_user)],
 ):
-    """Start a bot."""
+    """Start a bot and optionally pin startup to a specific worker."""
     return await request.app.state.bot_service.start_bot(
         bot_id, worker_id=body.worker_id
     )
@@ -111,7 +117,7 @@ async def stop_bot(
     request: Request,
     _user: Annotated[dict, Depends(get_current_user)],
 ):
-    """Stop a bot."""
+    """Stop a running bot and persist its updated stopped status."""
     return await request.app.state.bot_service.stop_bot(bot_id)
 
 
@@ -122,7 +128,7 @@ async def delete_bot(
     _user: Annotated[dict, Depends(get_current_user)],
     mode: str = "stop_cancel",
 ):
-    """Delete a bot."""
+    """Delete a bot using the requested shutdown/cancel cleanup mode."""
     await request.app.state.bot_service.delete_bot(bot_id, mode=mode)
     return {"detail": "Bot deleted."}
 

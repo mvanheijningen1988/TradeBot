@@ -24,6 +24,7 @@ class _DiagnosticsDbHandler(logging.Handler):
         self._service = service
 
     def emit(self, record: logging.LogRecord) -> None:
+        """Forward selected log records to the async diagnostics pipeline."""
         if record.name.startswith("manager.services.log_service"):
             return
 

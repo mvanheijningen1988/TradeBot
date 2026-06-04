@@ -51,4 +51,5 @@ class CoinIconService:
 
     @property
     def loaded(self) -> bool:
+        """Return whether coin icon mappings have been loaded in memory."""
         return self._loaded

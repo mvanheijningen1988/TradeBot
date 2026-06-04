@@ -102,10 +102,12 @@ class Strategy(abc.ABC):
 
     @property
     def state(self) -> StrategyState:
+        """Return the current lifecycle state for this strategy instance."""
         return self._state
 
     @property
     def config(self) -> StrategyConfig:
+        """Return the runtime configuration used by this strategy."""
         return self._config
 
     @staticmethod

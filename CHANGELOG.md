@@ -40,6 +40,10 @@ All notable changes to this project will be documented in this file.
 - **News signal tooltip content**:
   - Dashboard signal tooltips now display RSI metrics and suggested
     investment horizon context.
+- **Backend API and strategy documentation coverage**:
+  - Added or expanded docstrings for public classes and methods across
+    repositories, strategies, exchange client methods, API schema
+    models, core service helpers, and test modules.
 
 ### Fixed
 - Bots no longer lose recoverable runtime state on worker restart.

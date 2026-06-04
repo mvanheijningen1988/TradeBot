@@ -363,7 +363,7 @@ class BotService:
             )
 
     async def update_bot(self, bot_id: int, **fields: Any) -> dict[str, Any]:
-        """Update bot fields."""
+        """Update mutable bot fields and return the refreshed bot record."""
         await self._bot_repo.update(bot_id, **fields)
         return await self._bot_repo.get_by_id(bot_id)
 
@@ -372,7 +372,7 @@ class BotService:
         return await self._bot_repo.get_by_id(bot_id)
 
     async def list_bots(self) -> list[dict[str, Any]]:
-        """List all bots."""
+        """Return all persisted bots for dashboard and API consumers."""
         return await self._bot_repo.list_all()
 
     async def get_orders(

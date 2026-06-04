@@ -6,14 +6,14 @@ from typing import Optional
 
 
 class OrderSide(str, Enum):
-    """Order direction."""
+    """Buy or sell direction used for exchange orders."""
 
     BUY = "buy"
     SELL = "sell"
 
 
 class OrderType(str, Enum):
-    """Supported order types."""
+    """Supported exchange order types exposed by TradeBot."""
 
     MARKET = "market"
     LIMIT = "limit"
@@ -24,7 +24,7 @@ class OrderType(str, Enum):
 
 
 class OrderStatus(str, Enum):
-    """Order lifecycle states."""
+    """Lifecycle states returned by exchange order endpoints."""
 
     NEW = "new"
     AWAITING_TRIGGER = "awaitingTrigger"
@@ -35,7 +35,7 @@ class OrderStatus(str, Enum):
 
 
 class TimeInForce(str, Enum):
-    """Order time-in-force policies."""
+    """Time-in-force policies controlling order execution behavior."""
 
     GTC = "GTC"
     IOC = "IOC"
@@ -44,7 +44,7 @@ class TimeInForce(str, Enum):
 
 @dataclass
 class MarketInfo:
-    """Exchange market metadata."""
+    """Exchange market metadata used for validation and UI display."""
 
     market: str
     base: str
@@ -122,7 +122,7 @@ class Balance:
 
 @dataclass
 class AccountFees:
-    """Trading fee schedule."""
+    """Maker and taker trading fee schedule for an account."""
 
     taker: str
     maker: str
@@ -147,7 +147,7 @@ class BookEntry:
 
 @dataclass
 class OrderBook:
-    """Order book snapshot."""
+    """Order book snapshot containing current bid and ask levels."""
 
     market: str
     nonce: int
@@ -157,7 +157,7 @@ class OrderBook:
 
 @dataclass
 class Trade:
-    """Public trade."""
+    """Public trade print returned by market trade history endpoints."""
 
     trade_id: str
     timestamp: int

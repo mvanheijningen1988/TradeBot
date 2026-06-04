@@ -30,6 +30,7 @@ class UserRepository:
         language: str = "en",
         time_display: str = "local",
     ) -> int:
+        """Create a user row and return its database id."""
         cursor = await self._db.execute(
             "INSERT INTO users "
             "(username, password_hash, role, language, time_display) "
@@ -40,18 +41,21 @@ class UserRepository:
         return cursor.lastrowid
 
     async def get_by_username(self, username: str) -> Optional[dict]:
+        """Return a user dict by username, or None when absent."""
         row = await self._db.fetch_one(
             "SELECT * FROM users WHERE username = ?", (username,)
         )
         return dict(row) if row else None
 
     async def get_by_id(self, user_id: int) -> Optional[dict]:
+        """Return a user dict by primary key, or None when absent."""
         row = await self._db.fetch_one(
             "SELECT * FROM users WHERE id = ?", (user_id,)
         )
         return dict(row) if row else None
 
     async def list_all(self) -> list[dict]:
+        """Return all users with non-sensitive profile fields."""
         rows = await self._db.fetch_all(
             "SELECT id, username, role, language, time_display, "
             "created_at FROM users"
@@ -59,6 +63,7 @@ class UserRepository:
         return [dict(r) for r in rows]
 
     async def update(self, user_id: int, **fields: Any) -> None:
+        """Update allowed user fields for a single user id."""
         allowed = {
             "username",
             "password_hash",
@@ -79,10 +84,12 @@ class UserRepository:
         await self._db.commit()
 
     async def delete(self, user_id: int) -> None:
+        """Delete a user row by id."""
         await self._db.execute("DELETE FROM users WHERE id = ?", (user_id,))
         await self._db.commit()
 
     async def count(self) -> int:
+        """Return the total number of users."""
         row = await self._db.fetch_one("SELECT COUNT(*) as cnt FROM users")
         return row["cnt"]
 
@@ -103,6 +110,7 @@ class ExchangeRepository:
         api_secret: str,
         rate_limit: int = 1000,
     ) -> int:
+        """Create an exchange configuration row and return its id."""
         cursor = await self._db.execute(
             "INSERT INTO exchanges (name, api_key, api_secret, rate_limit) "
             "VALUES (?, ?, ?, ?)",
@@ -112,18 +120,21 @@ class ExchangeRepository:
         return cursor.lastrowid
 
     async def get_by_id(self, exchange_id: int) -> Optional[dict]:
+        """Return an exchange configuration by id."""
         row = await self._db.fetch_one(
             "SELECT * FROM exchanges WHERE id = ?", (exchange_id,)
         )
         return dict(row) if row else None
 
     async def list_all(self) -> list[dict]:
+        """Return all exchange configurations without secret fields."""
         rows = await self._db.fetch_all(
             "SELECT id, name, rate_limit, enabled, created_at FROM exchanges"
         )
         return [dict(r) for r in rows]
 
     async def update(self, exchange_id: int, **fields: Any) -> None:
+        """Update allowed fields for an exchange configuration."""
         allowed = {"name", "api_key", "api_secret", "rate_limit", "enabled"}
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
@@ -138,6 +149,7 @@ class ExchangeRepository:
         await self._db.commit()
 
     async def delete(self, exchange_id: int) -> None:
+        """Delete an exchange configuration by id."""
         await self._db.execute(
             "DELETE FROM exchanges WHERE id = ?", (exchange_id,)
         )
@@ -156,6 +168,7 @@ class WorkerRepository:
     async def create(
         self, agent_id: str, address: str, version: str = ""
     ) -> int:
+        """Create a worker row and return its id."""
         cursor = await self._db.execute(
             "INSERT INTO workers (agent_id, address, version) "
             "VALUES (?, ?, ?)",
@@ -165,24 +178,28 @@ class WorkerRepository:
         return cursor.lastrowid
 
     async def get_by_agent_id(self, agent_id: str) -> Optional[dict]:
+        """Return a worker by its stable agent identifier."""
         row = await self._db.fetch_one(
             "SELECT * FROM workers WHERE agent_id = ?", (agent_id,)
         )
         return dict(row) if row else None
 
     async def get_by_id(self, worker_id: int) -> Optional[dict]:
+        """Return a worker row by primary key."""
         row = await self._db.fetch_one(
             "SELECT * FROM workers WHERE id = ?", (worker_id,)
         )
         return dict(row) if row else None
 
     async def list_all(self) -> list[dict]:
+        """Return all worker rows."""
         rows = await self._db.fetch_all("SELECT * FROM workers")
         return [dict(r) for r in rows]
 
     async def update_status(
         self, worker_id: int, status: str
     ) -> None:
+        """Update the lifecycle status for a worker."""
         await self._db.execute(
             "UPDATE workers SET status = ? WHERE id = ?",
             (status, worker_id),
@@ -190,6 +207,7 @@ class WorkerRepository:
         await self._db.commit()
 
     async def update_heartbeat(self, worker_id: int) -> None:
+        """Set worker heartbeat timestamp to the current UTC time."""
         await self._db.execute(
             "UPDATE workers SET last_heartbeat = datetime('now') "
             "WHERE id = ?",
@@ -198,6 +216,7 @@ class WorkerRepository:
         await self._db.commit()
 
     async def approve(self, worker_id: int) -> None:
+        """Mark a worker as approved and ready for scheduling."""
         await self._db.execute(
             "UPDATE workers SET approved = 1, status = 'approved' "
             "WHERE id = ?",
@@ -206,6 +225,7 @@ class WorkerRepository:
         await self._db.commit()
 
     async def reject(self, worker_id: int) -> None:
+        """Mark a worker as rejected to block future assignments."""
         await self._db.execute(
             "UPDATE workers SET approved = 0, status = 'rejected' "
             "WHERE id = ?",
@@ -214,12 +234,14 @@ class WorkerRepository:
         await self._db.commit()
 
     async def delete(self, worker_id: int) -> None:
+        """Delete a worker row by id."""
         await self._db.execute(
             "DELETE FROM workers WHERE id = ?", (worker_id,)
         )
         await self._db.commit()
 
     async def get_approved_online(self) -> list[dict]:
+        """Return workers currently approved and considered online."""
         rows = await self._db.fetch_all(
             "SELECT * FROM workers WHERE approved = 1 "
             "AND status IN ('approved', 'online')"
@@ -248,6 +270,7 @@ class BotRepository:
         profit_mode: str = "withdraw",
         profit_skim_pct: float = 0.0,
     ) -> dict:
+        """Create a bot row and return the stored bot document."""
         bot_uuid = str(uuid_mod.uuid4())
         params_json = json.dumps(strategy_params)
         cursor = await self._db.execute(
@@ -265,6 +288,7 @@ class BotRepository:
         return await self.get_by_id(cursor.lastrowid)
 
     async def get_by_id(self, bot_id: int) -> Optional[dict]:
+        """Return a bot by id with decoded strategy parameters."""
         row = await self._db.fetch_one(
             "SELECT * FROM bots WHERE id = ?", (bot_id,)
         )
@@ -275,6 +299,7 @@ class BotRepository:
         return d
 
     async def get_by_uuid(self, bot_uuid: str) -> Optional[dict]:
+        """Return a bot by UUID with decoded strategy parameters."""
         row = await self._db.fetch_one(
             "SELECT * FROM bots WHERE uuid = ?", (bot_uuid,)
         )
@@ -285,6 +310,7 @@ class BotRepository:
         return d
 
     async def list_all(self) -> list[dict]:
+        """Return all bots ordered by id with decoded parameters."""
         rows = await self._db.fetch_all("SELECT * FROM bots ORDER BY id")
         result = []
         for r in rows:
@@ -294,6 +320,7 @@ class BotRepository:
         return result
 
     async def list_by_worker(self, worker_id: int) -> list[dict]:
+        """Return all bots currently assigned to a worker id."""
         rows = await self._db.fetch_all(
             "SELECT * FROM bots WHERE worker_id = ?", (worker_id,)
         )
@@ -307,6 +334,7 @@ class BotRepository:
     async def update_status(
         self, bot_id: int, status: str
     ) -> None:
+        """Update bot status and refresh the update timestamp."""
         await self._db.execute(
             "UPDATE bots SET status = ?, updated_at = datetime('now') "
             "WHERE id = ?",
@@ -317,6 +345,7 @@ class BotRepository:
     async def assign_worker(
         self, bot_id: int, worker_id: int, manual: bool = False
     ) -> None:
+        """Assign a bot to a worker and set assigning state metadata."""
         await self._db.execute(
             "UPDATE bots SET worker_id = ?, manual_assign = ?, "
             "status = 'assigning', updated_at = datetime('now') "
@@ -326,6 +355,7 @@ class BotRepository:
         await self._db.commit()
 
     async def update(self, bot_id: int, **fields: Any) -> None:
+        """Apply partial updates to a bot row using allowed fields only."""
         allowed = {
             "name", "strategy_params", "budget_quote",
             "profit_mode", "profit_skim_pct", "retry_count",
@@ -351,6 +381,7 @@ class BotRepository:
         await self._db.commit()
 
     async def delete(self, bot_id: int) -> None:
+        """Delete a bot and dependent history rows linked by foreign keys."""
         # Clean FK-dependent rows that reference bots.id.
         await self._db.execute(
             "DELETE FROM wallet_transactions WHERE bot_id = ?",
@@ -366,6 +397,7 @@ class BotRepository:
         await self._db.commit()
 
     async def get_next_operator_id(self) -> int:
+        """Return the next available operator id for bot exchange orders."""
         row = await self._db.fetch_one(
             "SELECT COALESCE(MAX(operator_id), 0) + 1 AS next_id FROM bots"
         )
@@ -395,6 +427,7 @@ class OrderHistoryRepository:
         fee_paid: str = "0",
         fee_currency: str = "",
     ) -> int:
+        """Insert or refresh an order-history row and return its id."""
         # Check if order already exists (e.g. synced from exchange).
         existing = await self._db.fetch_one(
             "SELECT id FROM order_history "
@@ -426,6 +459,7 @@ class OrderHistoryRepository:
     async def list_by_bot(
         self, bot_id: int, limit: int = 100
     ) -> list[dict]:
+        """Return recent order-history rows for a bot."""
         rows = await self._db.fetch_all(
             "SELECT * FROM order_history WHERE bot_id = ? "
             "ORDER BY id DESC LIMIT ?",
@@ -436,6 +470,7 @@ class OrderHistoryRepository:
     async def update_status(
         self, order_id: int, status: str
     ) -> None:
+        """Update status for a persisted order-history record."""
         await self._db.execute(
             "UPDATE order_history SET status = ?, "
             "updated_at = datetime('now') WHERE id = ?",
@@ -455,7 +490,7 @@ class OrderHistoryRepository:
 
 
 class TradeHistoryRepository:
-    """Persisted trade records."""
+    """Persisted trade execution records for bot performance tracking."""
 
     def __init__(self, db: Database) -> None:
         self._db = db
@@ -472,6 +507,7 @@ class TradeHistoryRepository:
         fee_currency: str = "",
         order_history_id: Optional[int] = None,
     ) -> int:
+        """Insert a trade-history row and return its id."""
         cursor = await self._db.execute(
             "INSERT INTO trade_history "
             "(bot_id, order_history_id, exchange_trade_id, market, side, "
@@ -488,6 +524,7 @@ class TradeHistoryRepository:
     async def list_by_bot(
         self, bot_id: int, limit: int = 100
     ) -> list[dict]:
+        """Return recent trade-history rows for a bot."""
         rows = await self._db.fetch_all(
             "SELECT * FROM trade_history WHERE bot_id = ? "
             "ORDER BY id DESC LIMIT ?",
@@ -513,6 +550,7 @@ class BudgetHistoryRepository:
         self._db = db
 
     async def record(self, bot_id: int, balance: float) -> None:
+        """Store one budget snapshot point for a bot."""
         await self._db.execute(
             "INSERT INTO budget_history (bot_id, balance) VALUES (?, ?)",
             (bot_id, balance),
@@ -522,6 +560,7 @@ class BudgetHistoryRepository:
     async def get_history(
         self, bot_id: int, limit: int = 500
     ) -> list[dict]:
+        """Return budget history points for a single bot."""
         rows = await self._db.fetch_all(
             "SELECT * FROM budget_history WHERE bot_id = ? "
             "ORDER BY timestamp DESC LIMIT ?",
@@ -559,6 +598,7 @@ class LogEntryRepository:
         bot_id: Optional[int] = None,
         worker_id: Optional[int] = None,
     ) -> int:
+        """Persist a diagnostics log entry and return its id."""
         cursor = await self._db.execute(
             "INSERT INTO log_entries "
             "(category, subcategory, level, message, "
@@ -581,6 +621,7 @@ class LogEntryRepository:
         level: Optional[str] = None,
         limit: int = 200,
     ) -> list[dict]:
+        """Query persisted logs using optional filters and level threshold."""
         conditions: list[str] = []
         params: list[Any] = []
 

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class Config:
-    """Immutable application configuration."""
+    """Immutable runtime configuration loaded from environment values."""
 
     # ── Database ─────────────────────────────────────────────────
     db_path: str = field(

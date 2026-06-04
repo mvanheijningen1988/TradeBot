@@ -12,6 +12,8 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 class UpdateUserRequest(BaseModel):
+    """Payload for updating user profile and authorization fields."""
+
     username: Optional[str] = None
     password: Optional[str] = None
     role: Optional[str] = None
@@ -20,6 +22,8 @@ class UpdateUserRequest(BaseModel):
 
 
 class CreateUserRequest(BaseModel):
+    """Payload for creating a new user account from the settings UI."""
+
     username: str
     password: str
     role: str = "user"
@@ -28,10 +32,14 @@ class CreateUserRequest(BaseModel):
 
 
 class UpdateLanguageRequest(BaseModel):
+    """Payload for changing the current user's language preference."""
+
     language: str
 
 
 class UpdateTimeDisplayRequest(BaseModel):
+    """Payload for selecting local or UTC time rendering in the UI."""
+
     time_display: str
 
 

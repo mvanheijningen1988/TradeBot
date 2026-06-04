@@ -31,20 +31,24 @@ class ConnectionManager:
         self._worker_clients: dict[str, WebSocket] = {}
 
     async def connect_ui(self, ws: WebSocket) -> None:
+        """Accept and register a UI websocket client connection."""
         await ws.accept()
         self._ui_clients.append(ws)
 
     def disconnect_ui(self, ws: WebSocket) -> None:
+        """Remove a UI websocket client from the active connection list."""
         if ws in self._ui_clients:
             self._ui_clients.remove(ws)
 
     async def connect_worker(
         self, ws: WebSocket, agent_id: str
     ) -> None:
+        """Accept and register a worker websocket by its agent id."""
         await ws.accept()
         self._worker_clients[agent_id] = ws
 
     def disconnect_worker(self, agent_id: str) -> None:
+        """Remove a worker websocket entry by agent id."""
         self._worker_clients.pop(agent_id, None)
 
     async def broadcast_ui(self, data: dict) -> None:

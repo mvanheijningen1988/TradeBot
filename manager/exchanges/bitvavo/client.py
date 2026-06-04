@@ -343,6 +343,7 @@ class BitvavoClient(ExchangeClient):
     async def get_markets(
         self, market: Optional[str] = None
     ) -> list[MarketInfo]:
+        """Return one or all market metadata entries from Bitvavo."""
         body: dict[str, Any] = {}
         if market:
             body["market"] = market
@@ -357,6 +358,7 @@ class BitvavoClient(ExchangeClient):
     async def get_order_book(
         self, market: str, depth: Optional[int] = None
     ) -> OrderBook:
+        """Return current bid/ask order book levels for a market."""
         body: dict[str, Any] = {"market": market}
         if depth is not None:
             body["depth"] = depth
@@ -376,6 +378,7 @@ class BitvavoClient(ExchangeClient):
         start: Optional[int] = None,
         end: Optional[int] = None,
     ) -> list[Trade]:
+        """Return recent public trade prints for a market."""
         body: dict[str, Any] = {"market": market, "limit": limit}
         if start is not None:
             body["start"] = start
@@ -397,6 +400,7 @@ class BitvavoClient(ExchangeClient):
         ]
 
     async def get_ticker_price(self, market: str) -> TickerPrice:
+        """Return the latest ticker price for the requested market."""
         response = await self._send_action(
             "getTickerPrice", {"market": market}
         )
@@ -423,6 +427,7 @@ class BitvavoClient(ExchangeClient):
         trigger_type: Optional[str] = None,
         trigger_reference: Optional[str] = None,
     ) -> Order:
+        """Create an order on Bitvavo and return the parsed response."""
         body: dict[str, Any] = {
             "market": market,
             "side": side.value,
@@ -464,6 +469,7 @@ class BitvavoClient(ExchangeClient):
         post_only: Optional[bool] = None,
         client_order_id: Optional[str] = None,
     ) -> Order:
+        """Update an existing Bitvavo order and return updated details."""
         body: dict[str, Any] = {
             "market": market,
             "orderId": order_id,
@@ -493,6 +499,7 @@ class BitvavoClient(ExchangeClient):
         order_id: str,
         client_order_id: Optional[str] = None,
     ) -> Order:
+        """Fetch one order by exchange order id or client order id."""
         body: dict[str, Any] = {"market": market, "orderId": order_id}
         if client_order_id:
             body["clientOrderId"] = client_order_id
@@ -502,6 +509,7 @@ class BitvavoClient(ExchangeClient):
     async def get_open_orders(
         self, market: Optional[str] = None
     ) -> list[Order]:
+        """Return all currently open orders, optionally for one market."""
         body: dict[str, Any] = {}
         if market:
             body["market"] = market
@@ -520,6 +528,7 @@ class BitvavoClient(ExchangeClient):
         start: Optional[int] = None,
         end: Optional[int] = None,
     ) -> list[Order]:
+        """Return historical orders for a market within optional bounds."""
         body: dict[str, Any] = {"market": market, "limit": limit}
         if start is not None:
             body["start"] = start
@@ -538,6 +547,7 @@ class BitvavoClient(ExchangeClient):
         operator_id: int,
         client_order_id: Optional[str] = None,
     ) -> dict[str, Any]:
+        """Cancel a single order and return the exchange response payload."""
         body: dict[str, Any] = {
             "market": market,
             "orderId": order_id,
@@ -551,6 +561,7 @@ class BitvavoClient(ExchangeClient):
     async def cancel_orders(
         self, market: str, operator_id: int
     ) -> list[dict[str, Any]]:
+        """Cancel all orders for a market and return cancellation results."""
         body: dict[str, Any] = {
             "market": market,
             "operatorId": operator_id,
@@ -566,6 +577,7 @@ class BitvavoClient(ExchangeClient):
     # ── Account ──────────────────────────────────────────────────
 
     async def get_account_fees(self) -> AccountFees:
+        """Return current maker/taker account fee settings."""
         response = await self._send_action("privateGetAccount", {})
         fees = response["response"]["fees"]
         return AccountFees(
@@ -577,6 +589,7 @@ class BitvavoClient(ExchangeClient):
     async def get_balance(
         self, symbol: Optional[str] = None
     ) -> list[Balance]:
+        """Return account balances, optionally filtered by symbol."""
         body: dict[str, Any] = {}
         if symbol:
             body["symbol"] = symbol
@@ -598,6 +611,7 @@ class BitvavoClient(ExchangeClient):
     async def subscribe_ticker(
         self, markets: list[str], callback: Callable
     ) -> None:
+        """Subscribe to ticker stream updates for one or more markets."""
         if "ticker" not in self._subscriptions:
             self._subscriptions["ticker"] = {}
         for m in markets:
@@ -611,6 +625,7 @@ class BitvavoClient(ExchangeClient):
         logger.info("Subscribed to ticker for %s", markets)
 
     async def unsubscribe_ticker(self, markets: list[str]) -> None:
+        """Unsubscribe ticker callbacks for one or more markets."""
         msg = {
             "action": "unsubscribe",
             "channels": [{"name": "ticker", "markets": markets}],

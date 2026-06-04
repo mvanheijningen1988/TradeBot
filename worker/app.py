@@ -40,6 +40,7 @@ class _WorkerForwardLogHandler(logging.Handler):
         )
 
     def emit(self, record: logging.LogRecord) -> None:
+        """Forward eligible worker log records to the manager websocket."""
         if any(
             record.name.startswith(prefix)
             for prefix in self._excluded_prefixes

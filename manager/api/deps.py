@@ -35,7 +35,7 @@ async def get_current_user(
 async def require_admin(
     user: Annotated[dict, Depends(get_current_user)],
 ) -> dict:
-    """Require admin role."""
+    """Ensure the authenticated user has the admin authorization role."""
     if user.get("role") != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

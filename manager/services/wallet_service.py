@@ -355,7 +355,7 @@ class WalletService:
         logger.info("Wallet verification loop started.")
 
     async def stop_verification_loop(self) -> None:
-        """Stop periodic verification."""
+        """Stop the background wallet verification task gracefully."""
         self._running = False
         if self._verify_task:
             self._verify_task.cancel()

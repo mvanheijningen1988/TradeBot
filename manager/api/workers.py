@@ -11,6 +11,8 @@ router = APIRouter(prefix="/workers", tags=["workers"])
 
 
 class RegisterWorkerRequest(BaseModel):
+    """Payload sent by worker nodes when registering with a manager."""
+
     agent_id: str
     address: str
     version: str = ""

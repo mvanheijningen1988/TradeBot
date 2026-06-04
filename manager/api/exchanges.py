@@ -33,6 +33,8 @@ async def _persist_exchange_error(request: Request, message: str) -> None:
 
 
 class CreateExchangeRequest(BaseModel):
+    """Payload for storing a new exchange credential configuration."""
+
     name: str
     api_key: str
     api_secret: str
@@ -40,6 +42,8 @@ class CreateExchangeRequest(BaseModel):
 
 
 class UpdateExchangeRequest(BaseModel):
+    """Payload for partial updates to an existing exchange config."""
+
     api_key: Optional[str] = None
     api_secret: Optional[str] = None
     rate_limit: Optional[int] = None

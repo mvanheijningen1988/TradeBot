@@ -23,6 +23,7 @@ class CacheEntry:
 
     @property
     def expired(self) -> bool:
+        """Return True when the entry has passed its monotonic expiry."""
         return time.monotonic() >= self.expires_at
 
 
@@ -50,5 +51,5 @@ class CacheService:
         self._store.pop(key, None)
 
     def clear(self) -> None:
-        """Remove all entries."""
+        """Remove all cached keys regardless of their expiry."""
         self._store.clear()

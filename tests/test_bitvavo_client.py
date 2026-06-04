@@ -16,6 +16,7 @@ class TestBitvavoSignature:
     """Verify HMAC-SHA256 signature generation."""
 
     def test_create_signature(self):
+        """Build a deterministic signature and compare with local HMAC."""
         client = BitvavoClient(
             api_key="testkey", api_secret="bitvavo"
         )
@@ -39,9 +40,10 @@ class TestBitvavoSignature:
 
 
 class TestBitvavoParser:
-    """Verify response parsing."""
+    """Verify parsing helpers for order and market payloads."""
 
     def test_parse_order(self):
+        """Parse a limit order payload into a typed Order object."""
         data = {
             "orderId": "abc-123",
             "market": "BTC-EUR",
@@ -71,6 +73,7 @@ class TestBitvavoParser:
         assert order.price == "50000"
 
     def test_parse_order_with_fills(self):
+        """Parse an order payload containing fill information."""
         data = {
             "orderId": "abc-456",
             "market": "ETH-EUR",
@@ -104,6 +107,7 @@ class TestBitvavoParser:
         assert order.fills[0].taker is True
 
     def test_parse_market(self):
+        """Parse market metadata payload into a MarketInfo object."""
         data = {
             "market": "BTC-EUR",
             "base": "BTC",
@@ -129,9 +133,10 @@ class TestBitvavoParser:
 
 
 class TestExchangeRegistry:
-    """Verify exchange registration."""
+    """Verify exchange registry wiring for Bitvavo client discovery."""
 
     def test_register_bitvavo(self):
+        """Register Bitvavo and confirm lookup/list operations."""
         from manager.exchanges.registry import ExchangeRegistry
 
         ExchangeRegistry.register("bitvavo", BitvavoClient)

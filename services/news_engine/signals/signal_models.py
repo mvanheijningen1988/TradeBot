@@ -18,7 +18,7 @@ class SignalDirection(str, Enum):
 
 
 class SentimentLabel(str, Enum):
-    """VADER sentiment classification."""
+    """Normalized sentiment labels produced by classifier models."""
 
     BULLISH = "bullish"
     NEUTRAL = "neutral"
@@ -80,6 +80,7 @@ class EventDetectionResult(BaseModel):
 
     @property
     def has_events(self) -> bool:
+        """Return True when at least one event was detected in the article."""
         return len(self.events) > 0
 
 

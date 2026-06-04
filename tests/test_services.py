@@ -37,6 +37,7 @@ async def db():
 
 @pytest.fixture
 def config():
+    """Provide a config object with deterministic JWT secret for tests."""
     os.environ["TRADEBOT_JWT_SECRET"] = "test-secret-key-12345678901234567890abcd"
     cfg = load_config()
     os.environ.pop("TRADEBOT_JWT_SECRET", None)
@@ -45,6 +46,7 @@ def config():
 
 @pytest.fixture
 async def repos(db):
+    """Build repository instances backed by the test database."""
     return {
         "user": UserRepository(db),
         "exchange": ExchangeRepository(db),
@@ -61,7 +63,10 @@ async def repos(db):
 
 
 class TestAuthService:
+    """Tests for authentication setup, credential checks, and tokens."""
+
     async def test_ensure_admin_exists(self, config, repos):
+        """Ensure startup creates a single default admin account."""
         auth = AuthService(config, repos["user"])
         await auth.ensure_admin_exists()
 
@@ -71,6 +76,7 @@ class TestAuthService:
         assert users[0]["role"] == "admin"
 
     async def test_ensure_admin_idempotent(self, config, repos):
+        """Ensure repeated admin initialization does not duplicate users."""
         auth = AuthService(config, repos["user"])
         await auth.ensure_admin_exists()
         await auth.ensure_admin_exists()
@@ -79,6 +85,7 @@ class TestAuthService:
         assert len(users) == 1
 
     async def test_authenticate_valid(self, config, repos):
+        """Authenticate successfully when username and password are valid."""
         from passlib.hash import bcrypt
 
         hashed = bcrypt.hash("password123")
@@ -90,6 +97,7 @@ class TestAuthService:
         assert user["username"] == "testuser"
 
     async def test_authenticate_invalid(self, config, repos):
+        """Return no user when password validation fails."""
         from passlib.hash import bcrypt
 
         hashed = bcrypt.hash("password123")
@@ -100,6 +108,7 @@ class TestAuthService:
         assert user is None
 
     async def test_token_roundtrip(self, config, repos):
+        """Create and verify a token to validate payload roundtrip."""
         auth = AuthService(config, repos["user"])
         token = auth.create_access_token(1, "admin")
         payload = auth.verify_token(token)
@@ -108,6 +117,7 @@ class TestAuthService:
         assert payload["role"] == "admin"
 
     async def test_verify_invalid_token(self, config, repos):
+        """Return None when token verification receives invalid input."""
         auth = AuthService(config, repos["user"])
         result = auth.verify_token("invalid.token.value")
         assert result is None
@@ -117,22 +127,28 @@ class TestAuthService:
 
 
 class TestCacheService:
+    """Tests for the in-memory cache service behavior."""
+
     def test_set_and_get(self):
+        """Store and retrieve a cached value by key."""
         cache = CacheService()
         cache.set("key1", "value1", 60)
         assert cache.get("key1") == "value1"
 
     def test_get_missing(self):
+        """Return None when the requested cache key does not exist."""
         cache = CacheService()
         assert cache.get("nonexistent") is None
 
     def test_invalidate(self):
+        """Invalidate a key and confirm it is no longer retrievable."""
         cache = CacheService()
         cache.set("key1", "value1", 60)
         cache.invalidate("key1")
         assert cache.get("key1") is None
 
     def test_clear(self):
+        """Clear cache and verify all existing keys are removed."""
         cache = CacheService()
         cache.set("a", 1, 60)
         cache.set("b", 2, 60)
@@ -145,7 +161,10 @@ class TestCacheService:
 
 
 class TestBotService:
+    """Tests for bot lifecycle behavior in the bot service."""
+
     async def test_create_bot(self, config, repos):
+        """Create a bot and verify persisted defaults and identifiers."""
         # Need an exchange first.
         exchange_id = await repos["exchange"].create(
             "bitvavo", "key", "secret"
@@ -170,6 +189,7 @@ class TestBotService:
         assert bot["operator_id"] == 1
 
     async def test_create_bot_invalid_profit_mode(self, config, repos):
+        """Reject bot creation when profit mode value is unsupported."""
         exchange_id = await repos["exchange"].create("bitvavo", "k", "s")
         worker_svc = WorkerService(config, repos["worker"], repos["bot"])
         bot_svc = BotService(
@@ -188,6 +208,7 @@ class TestBotService:
             )
 
     async def test_stop_bot(self, config, repos):
+        """Stop an existing bot and verify status transitions to stopped."""
         exchange_id = await repos["exchange"].create("bitvavo", "k", "s")
         worker_svc = WorkerService(config, repos["worker"], repos["bot"])
         bot_svc = BotService(
@@ -202,6 +223,7 @@ class TestBotService:
         assert stopped["status"] == "stopped"
 
     async def test_list_bots(self, config, repos):
+        """List all bots and validate expected count is returned."""
         exchange_id = await repos["exchange"].create("bitvavo", "k", "s")
         worker_svc = WorkerService(config, repos["worker"], repos["bot"])
         bot_svc = BotService(
@@ -225,13 +247,17 @@ class TestBotService:
 
 
 class TestWorkerService:
+    """Tests for worker registration, approval, and selection logic."""
+
     async def test_register_worker(self, config, repos):
+        """Register a new worker and verify initial pending state."""
         svc = WorkerService(config, repos["worker"], repos["bot"])
         worker = await svc.register("agent-1", "192.168.1.1", "0.2.0")
         assert worker["agent_id"] == "agent-1"
         assert worker["status"] == "pending"
 
     async def test_register_rejected_worker_raises(self, config, repos):
+        """Block re-registration attempts for workers marked rejected."""
         svc = WorkerService(config, repos["worker"], repos["bot"])
         worker = await svc.register("agent-2", "192.168.1.2", "0.2.0")
         await svc.reject(worker["id"])
@@ -240,6 +266,7 @@ class TestWorkerService:
             await svc.register("agent-2", "192.168.1.2", "0.2.0")
 
     async def test_approve_worker(self, config, repos):
+        """Approve a worker and verify list output reflects approval."""
         svc = WorkerService(config, repos["worker"], repos["bot"])
         worker = await svc.register("agent-3", "10.0.0.1", "0.2.0")
         await svc.approve(worker["id"])
@@ -249,6 +276,7 @@ class TestWorkerService:
         assert approved[0]["status"] == "approved"
 
     async def test_select_worker(self, config, repos):
+        """Select an approved worker when one is available."""
         svc = WorkerService(config, repos["worker"], repos["bot"])
         worker = await svc.register("agent-4", "10.0.0.2", "0.2.0")
         await svc.approve(worker["id"])
@@ -262,7 +290,10 @@ class TestWorkerService:
 
 
 class TestLogService:
+    """Tests for diagnostics log persistence and filtering behavior."""
+
     async def test_persist_and_search(self, config, repos):
+        """Persist a log entry and fetch it by correlation id."""
         log_svc = LogService(config, repos["log"])
         await log_svc.persist(
             category="bot",
@@ -277,6 +308,7 @@ class TestLogService:
         assert results[0]["message"] == "Test log message"
 
     async def test_search_by_category(self, config, repos):
+        """Filter persisted logs by category and verify only matches return."""
         log_svc = LogService(config, repos["log"])
         await log_svc.persist(category="manager", message="m1")
         await log_svc.persist(category="worker", message="w1")
@@ -286,6 +318,7 @@ class TestLogService:
         assert results[0]["category"] == "manager"
 
     def test_set_level(self, config, repos):
+        """Set a category override and verify it is stored in memory."""
         log_svc = LogService(config, repos["log"])
         log_svc.set_level("manager.services", "DEBUG")
         levels = log_svc.get_levels()
@@ -296,7 +329,10 @@ class TestLogService:
 
 
 class TestBudgetService:
+    """Tests for recording and retrieving bot budget history."""
+
     async def test_record_and_get_history(self, config, repos):
+        """Record budget snapshots and retrieve them in history output."""
         # Need a bot for FK constraint.
         exchange_id = await repos["exchange"].create("bitvavo", "k", "s")
         bot = await repos["bot"].create(
