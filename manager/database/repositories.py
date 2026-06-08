@@ -29,13 +29,22 @@ class UserRepository:
         role: str = "user",
         language: str = "en",
         time_display: str = "local",
+        must_change_password: int = 0,
     ) -> int:
         """Create a user row and return its database id."""
         cursor = await self._db.execute(
             "INSERT INTO users "
-            "(username, password_hash, role, language, time_display) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (username, password_hash, role, language, time_display),
+            "(username, password_hash, role, language, time_display, "
+            "must_change_password) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                username,
+                password_hash,
+                role,
+                language,
+                time_display,
+                must_change_password,
+            ),
         )
         await self._db.commit()
         return cursor.lastrowid
@@ -58,7 +67,7 @@ class UserRepository:
         """Return all users with non-sensitive profile fields."""
         rows = await self._db.fetch_all(
             "SELECT id, username, role, language, time_display, "
-            "created_at FROM users"
+            "must_change_password, created_at FROM users"
         )
         return [dict(r) for r in rows]
 
@@ -70,6 +79,7 @@ class UserRepository:
             "role",
             "language",
             "time_display",
+            "must_change_password",
         }
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
@@ -485,6 +495,26 @@ class OrderHistoryRepository:
         )
         await self._db.commit()
 
+    async def list_exchange_order_ids_by_bots(
+        self,
+        bot_ids: list[int],
+    ) -> set[str]:
+        """Return known exchange order ids for the provided bot ids."""
+        if not bot_ids:
+            return set()
+
+        placeholders = ", ".join("?" for _ in bot_ids)
+        rows = await self._db.fetch_all(
+            "SELECT DISTINCT exchange_order_id FROM order_history "
+            f"WHERE bot_id IN ({placeholders})",
+            tuple(bot_ids),
+        )
+        return {
+            str(row["exchange_order_id"])
+            for row in rows
+            if row["exchange_order_id"]
+        }
+
 
 # ── Trade history repository ─────────────────────────────────────
 
@@ -558,23 +588,59 @@ class BudgetHistoryRepository:
         await self._db.commit()
 
     async def get_history(
-        self, bot_id: int, limit: int = 500
+        self,
+        bot_id: int,
+        limit: int = 500,
+        since_minutes: Optional[int] = None,
     ) -> list[dict]:
         """Return budget history points for a single bot."""
-        rows = await self._db.fetch_all(
+        params: list[Any] = [bot_id]
+        query = (
             "SELECT * FROM budget_history WHERE bot_id = ? "
-            "ORDER BY timestamp DESC LIMIT ?",
-            (bot_id, limit),
+        )
+        if since_minutes is not None:
+            query += "AND timestamp >= datetime('now', ?) "
+            params.append(f"-{since_minutes} minutes")
+        query += "ORDER BY timestamp DESC LIMIT ?"
+        params.append(limit)
+        rows = await self._db.fetch_all(
+            query,
+            tuple(params),
         )
         return [dict(r) for r in rows]
 
-    async def get_all_history(self, limit: int = 500) -> list[dict]:
-        """Return aggregated budget history across all bots."""
+    async def get_all_history(
+        self,
+        limit: int = 500,
+        since_minutes: Optional[int] = None,
+    ) -> list[dict]:
+        """Return aggregated budget history across all bots.
+
+        Multiple snapshots for the same bot can arrive in the same second.
+        To avoid temporary double spikes, aggregate by taking the latest
+        entry per bot+timestamp second before summing totals.
+        """
+        where_clause = ""
+        params: list[Any] = []
+        if since_minutes is not None:
+            where_clause = "WHERE timestamp >= datetime('now', ?)"
+            params.append(f"-{since_minutes} minutes")
+
         rows = await self._db.fetch_all(
-            "SELECT timestamp, SUM(balance) as balance "
-            "FROM budget_history GROUP BY timestamp "
+            "WITH latest_per_bot_ts AS ("
+            "  SELECT bot_id, timestamp, MAX(id) AS max_id "
+            "  FROM budget_history "
+            f"  {where_clause} "
+            "  GROUP BY bot_id, timestamp"
+            "), dedup AS ("
+            "  SELECT b.timestamp, b.balance "
+            "  FROM budget_history b "
+            "  JOIN latest_per_bot_ts d ON b.id = d.max_id"
+            ") "
+            "SELECT timestamp, SUM(balance) AS balance "
+            "FROM dedup GROUP BY timestamp "
             "ORDER BY timestamp DESC LIMIT ?",
-            (limit,),
+            (*params, limit),
         )
         return [dict(r) for r in rows]
 
@@ -809,11 +875,18 @@ class NewsSettingsRepository:
         )
         return row["cnt"]
 
-    async def create_feed(self, name: str, url: str) -> int:
-        """Add an RSS feed and return its id."""
+    async def create_feed(
+        self,
+        name: str,
+        url: str,
+        source_type: str = "rss",
+        weight: float = 1.0,
+    ) -> int:
+        """Add a news source and return its id."""
         cursor = await self._db.execute(
-            "INSERT INTO news_feeds (name, url) VALUES (?, ?)",
-            (name, url),
+            "INSERT INTO news_feeds (name, url, source_type, weight) "
+            "VALUES (?, ?, ?, ?)",
+            (name, url, source_type, weight),
         )
         await self._db.commit()
         return cursor.lastrowid
@@ -822,7 +895,7 @@ class NewsSettingsRepository:
         self, feed_id: int, **fields: Any
     ) -> None:
         """Update name or enabled state for a feed."""
-        allowed = {"name", "url", "enabled"}
+        allowed = {"name", "url", "enabled", "source_type", "weight"}
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
             return
@@ -946,3 +1019,10 @@ class NewsSettingsRepository:
             (key, value),
         )
         await self._db.commit()
+
+    async def list_params(self) -> list[dict]:
+        """Return all stored news engine parameters."""
+        rows = await self._db.fetch_all(
+            "SELECT key, value FROM news_engine_params ORDER BY key"
+        )
+        return [dict(r) for r in rows]

@@ -23,10 +23,28 @@ export interface Bot {
   updated_at: string;
 }
 
+export interface BotGridLevel {
+  index: number;
+  price: number;
+  order_type: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class BotService {
-  private http = inject(HttpClient);
-  private url = `${environment.apiUrl}/bots`;
+  private readonly http = inject(HttpClient);
+  private readonly url = `${environment.apiUrl}/bots`;
+
+  private buildBudgetHistoryParams(
+    limit: number,
+    sinceMinutes?: number
+  ): URLSearchParams {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (sinceMinutes !== undefined) {
+      params.set('since_minutes', String(sinceMinutes));
+    }
+    return params;
+  }
 
   list(): Observable<Bot[]> {
     return this.http.get<Bot[]>(this.url);
@@ -68,15 +86,32 @@ export class BotService {
     return this.http.get<unknown[]>(`${this.url}/${id}/open-orders`);
   }
 
+  getGridLevels(id: number): Observable<BotGridLevel[]> {
+    return this.http.get<BotGridLevel[]>(`${this.url}/${id}/grid-levels`);
+  }
+
   getTrades(id: number): Observable<unknown[]> {
     return this.http.get<unknown[]>(`${this.url}/${id}/trades`);
   }
 
-  getBudgetHistory(id: number): Observable<unknown[]> {
-    return this.http.get<unknown[]>(`${this.url}/${id}/budget-history`);
+  getBudgetHistory(
+    id: number,
+    limit = 500,
+    sinceMinutes?: number
+  ): Observable<unknown[]> {
+    const params = this.buildBudgetHistoryParams(limit, sinceMinutes);
+    return this.http.get<unknown[]>(
+      `${this.url}/${id}/budget-history?${params.toString()}`
+    );
   }
 
-  getOverallBudgetHistory(): Observable<unknown[]> {
-    return this.http.get<unknown[]>(`${this.url}/overview/budget-history`);
+  getOverallBudgetHistory(
+    limit = 500,
+    sinceMinutes?: number
+  ): Observable<unknown[]> {
+    const params = this.buildBudgetHistoryParams(limit, sinceMinutes);
+    return this.http.get<unknown[]>(
+      `${this.url}/overview/budget-history?${params.toString()}`
+    );
   }
 }

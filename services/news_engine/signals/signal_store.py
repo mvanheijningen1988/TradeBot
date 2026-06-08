@@ -9,8 +9,14 @@ retrying on the next processing cycle.
 
 import logging
 from collections import deque
+import json
+from datetime import datetime, timezone
 
-from services.news_engine.signals.signal_models import NewsSignal
+from services.news_engine.signals.signal_models import (
+    NewsArticle,
+    NewsSignal,
+    SentimentLabel,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +70,48 @@ class SignalStore:
             "investment_horizon",
             "TEXT NOT NULL DEFAULT 'unknown'",
         )
+        await self._db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS news_articles (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                title           TEXT    NOT NULL,
+                url             TEXT    NOT NULL UNIQUE,
+                source          TEXT    NOT NULL,
+                source_type     TEXT    NOT NULL DEFAULT 'rss',
+                source_weight   REAL    NOT NULL DEFAULT 1.0,
+                sentiment_label TEXT    NOT NULL,
+                sentiment_score REAL    NOT NULL,
+                summary         TEXT    NOT NULL DEFAULT '',
+                content         TEXT    NOT NULL DEFAULT '',
+                coins_json      TEXT    NOT NULL DEFAULT '[]',
+                timestamp       TEXT    NOT NULL,
+                created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+            )
+            """
+        )
+        await self._ensure_article_column(
+            "source_type",
+            "TEXT NOT NULL DEFAULT 'rss'",
+        )
+        await self._ensure_article_column(
+            "source_weight",
+            "REAL NOT NULL DEFAULT 1.0",
+        )
+        await self._ensure_article_column(
+            "coins_json",
+            "TEXT NOT NULL DEFAULT '[]'",
+        )
         await self._db.commit()
+
+    async def _ensure_article_column(self, name: str, column_def: str) -> None:
+        """Add a column to news_articles if it does not exist yet."""
+        rows = await self._db.fetch_all("PRAGMA table_info(news_articles)")
+        existing = {row["name"] for row in rows}
+        if name in existing:
+            return
+        await self._db.execute(
+            f"ALTER TABLE news_articles ADD COLUMN {name} {column_def}"
+        )
 
     async def _ensure_column(self, name: str, column_def: str) -> None:
         """Add a column to news_signals if it does not exist yet."""
@@ -172,11 +219,143 @@ class SignalStore:
                 "Flushed %d pending signals to DB.", len(to_write)
             )
 
+    async def save_article(
+        self,
+        article: NewsArticle,
+    ) -> None:
+        """Persist a news article snapshot for the news page."""
+        if not self._db:
+            return
+
+        await self._db.execute(
+            """
+            INSERT INTO news_articles
+                (title, url, source, source_type, source_weight,
+                 sentiment_label, sentiment_score, summary, content,
+                 coins_json, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(url) DO UPDATE SET
+                title = excluded.title,
+                source = excluded.source,
+                source_type = excluded.source_type,
+                source_weight = excluded.source_weight,
+                sentiment_label = excluded.sentiment_label,
+                sentiment_score = excluded.sentiment_score,
+                summary = excluded.summary,
+                content = excluded.content,
+                coins_json = excluded.coins_json,
+                timestamp = excluded.timestamp
+            """,
+            (
+                article.title,
+                article.url,
+                article.source,
+                article.source_type,
+                article.source_weight,
+                article.sentiment_label.value,
+                article.sentiment_score,
+                article.summary,
+                article.content,
+                json.dumps(article.coins),
+                article.timestamp.isoformat(),
+            ),
+        )
+        await self._db.commit()
+
     def get_latest(self, limit: int = 50) -> list[NewsSignal]:
         """Return the most recent signals from memory."""
         items = list(self._cache)
         items.reverse()
         return items[:limit]
+
+    async def get_latest_articles(self, limit: int = 100) -> list[dict]:
+        """Return the most recent article snapshots from the database."""
+        if not self._db:
+            return []
+        rows = await self._db.fetch_all(
+            """
+            SELECT title, url, source, source_type, source_weight,
+                   sentiment_label, sentiment_score, summary, content,
+                   coins_json, timestamp
+            FROM news_articles
+            ORDER BY timestamp DESC, id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        articles: list[dict] = []
+        for row in rows:
+            article = dict(row)
+            article["coins"] = json.loads(article.pop("coins_json") or "[]")
+            articles.append(article)
+        return articles
+
+    @staticmethod
+    def _score_to_label(score: float) -> str:
+        """Map a weighted score to a human-friendly day label."""
+        if score >= 0.15:
+            return "positive"
+        if score <= -0.15:
+            return "negative"
+        return "neutral"
+
+    @staticmethod
+    def _article_weight(article: dict, now: datetime) -> float:
+        """Return the weighted importance for a single article."""
+        timestamp = article.get("timestamp", "")
+        parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        age_hours = max((now - parsed).total_seconds() / 3600.0, 0.0)
+        recency_weight = 1.0 / (1.0 + age_hours)
+        source_type = str(article.get("source_type") or "rss")
+        source_type_weight = 1.0 if source_type == "rss" else 0.9
+        source_weight = float(article.get("source_weight") or 1.0)
+        return recency_weight * source_type_weight * source_weight
+
+    async def get_news_overview(self, limit: int = 100) -> dict:
+        """Return a weighted sentiment summary for recent articles."""
+        articles = await self.get_latest_articles(limit=limit)
+        if not articles:
+            return {
+                "overall_score": 0.0,
+                "label": "neutral",
+                "positive_day": False,
+                "article_count": 0,
+                "positive_count": 0,
+                "negative_count": 0,
+                "neutral_count": 0,
+            }
+
+        now = datetime.now(timezone.utc)
+        total_weight = 0.0
+        weighted_score = 0.0
+        counts = {"positive": 0, "negative": 0, "neutral": 0}
+
+        for article in articles:
+            weight = self._article_weight(article, now)
+            score = float(article.get("sentiment_score") or 0.0)
+            weighted_score += score * weight
+            total_weight += weight
+
+            label = str(article.get("sentiment_label") or "neutral")
+            if label == SentimentLabel.BULLISH.value:
+                counts["positive"] += 1
+            elif label == SentimentLabel.BEARISH.value:
+                counts["negative"] += 1
+            else:
+                counts["neutral"] += 1
+
+        overall_score = weighted_score / total_weight if total_weight else 0.0
+        label = self._score_to_label(overall_score)
+
+        return {
+            "overall_score": round(overall_score, 4),
+            "label": label,
+            "positive_day": label == "positive",
+            "article_count": len(articles),
+            "positive_count": counts["positive"],
+            "negative_count": counts["negative"],
+            "neutral_count": counts["neutral"],
+        }
 
     async def purge_below_confidence(
         self, threshold: float

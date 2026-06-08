@@ -5,7 +5,7 @@ include/exclude word filters used by the news sentiment engine.
 All changes take effect on the next processing cycle (≤ 5 min).
 """
 
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -13,6 +13,11 @@ from pydantic import BaseModel
 from manager.api.deps import get_current_user, require_admin
 
 router = APIRouter(prefix="/news", tags=["news-settings"])
+
+
+def _get_engine(request: Request):
+    """Return the news engine if it is available."""
+    return getattr(request.app.state, "news_engine", None)
 
 
 # ── Request models ────────────────────────────────────────────────
@@ -23,6 +28,8 @@ class CreateFeedRequest(BaseModel):
 
     name: str
     url: str
+    source_type: str = "rss"
+    weight: float = 1.0
 
 
 class UpdateFeedRequest(BaseModel):
@@ -30,6 +37,8 @@ class UpdateFeedRequest(BaseModel):
 
     name: Optional[str] = None
     enabled: Optional[bool] = None
+    source_type: Optional[str] = None
+    weight: Optional[float] = None
 
 
 class CreateCoinMappingRequest(BaseModel):
@@ -76,8 +85,8 @@ async def _trigger_reload(request: Request) -> None:
 @router.get("/feeds")
 async def list_feeds(
     request: Request,
-    _user: Annotated[dict, Depends(get_current_user)],
-):
+    _user: Annotated[dict[str, Any], Depends(get_current_user)],
+) -> list[dict[str, Any]]:
     """Return all configured RSS news feeds."""
     return await _repo(request).list_feeds()
 
@@ -90,12 +99,17 @@ async def list_feeds(
 async def create_feed(
     body: CreateFeedRequest,
     request: Request,
-    _user: Annotated[dict, Depends(require_admin)],
-):
+    _user: Annotated[dict[str, Any], Depends(require_admin)],
+) -> dict[str, Any]:
     """Add a new RSS feed (admin only)."""
     repo = _repo(request)
     try:
-        feed_id = await repo.create_feed(body.name, body.url)
+        feed_id = await repo.create_feed(
+            body.name,
+            body.url,
+            body.source_type,
+            body.weight,
+        )
     except Exception as exc:
         if "UNIQUE" in str(exc).upper():
             raise HTTPException(
@@ -103,7 +117,13 @@ async def create_feed(
             )
         raise
     await _trigger_reload(request)
-    return {"id": feed_id, "name": body.name, "url": body.url}
+    return {
+        "id": feed_id,
+        "name": body.name,
+        "url": body.url,
+        "source_type": body.source_type,
+        "weight": body.weight,
+    }
 
 
 @router.patch(
@@ -114,8 +134,8 @@ async def update_feed(
     feed_id: int,
     body: UpdateFeedRequest,
     request: Request,
-    _user: Annotated[dict, Depends(require_admin)],
-):
+    _user: Annotated[dict[str, Any], Depends(require_admin)],
+) -> dict[str, str]:
     """Update a feed's name or enabled state (admin only)."""
     repo = _repo(request)
     feeds = await repo.list_feeds()
@@ -137,8 +157,8 @@ async def update_feed(
 async def delete_feed(
     feed_id: int,
     request: Request,
-    _user: Annotated[dict, Depends(require_admin)],
-):
+    _user: Annotated[dict[str, Any], Depends(require_admin)],
+) -> dict[str, str]:
     """Delete an RSS feed by id (admin only)."""
     repo = _repo(request)
     feeds = await repo.list_feeds()
@@ -155,8 +175,8 @@ async def delete_feed(
 @router.get("/coin-mappings")
 async def list_coin_mappings(
     request: Request,
-    _user: Annotated[dict, Depends(get_current_user)],
-):
+    _user: Annotated[dict[str, Any], Depends(get_current_user)],
+) -> list[dict[str, Any]]:
     """Return all coin name → symbol mappings."""
     return await _repo(request).list_coin_mappings()
 
@@ -169,8 +189,8 @@ async def list_coin_mappings(
 async def create_coin_mapping(
     body: CreateCoinMappingRequest,
     request: Request,
-    _user: Annotated[dict, Depends(require_admin)],
-):
+    _user: Annotated[dict[str, Any], Depends(require_admin)],
+) -> dict[str, Any]:
     """Add a coin mapping (admin only)."""
     repo = _repo(request)
     try:
@@ -201,8 +221,8 @@ async def update_coin_mapping(
     mapping_id: int,
     body: UpdateCoinMappingRequest,
     request: Request,
-    _user: Annotated[dict, Depends(require_admin)],
-):
+    _user: Annotated[dict[str, Any], Depends(require_admin)],
+) -> dict[str, str]:
     """Update a coin mapping entry (admin only)."""
     repo = _repo(request)
     mappings = await repo.list_coin_mappings()
@@ -222,8 +242,8 @@ async def update_coin_mapping(
 async def delete_coin_mapping(
     mapping_id: int,
     request: Request,
-    _user: Annotated[dict, Depends(require_admin)],
-):
+    _user: Annotated[dict[str, Any], Depends(require_admin)],
+) -> dict[str, str]:
     """Delete a coin mapping by id (admin only)."""
     repo = _repo(request)
     mappings = await repo.list_coin_mappings()
@@ -240,8 +260,8 @@ async def delete_coin_mapping(
 @router.get("/word-filters")
 async def list_word_filters(
     request: Request,
-    _user: Annotated[dict, Depends(get_current_user)],
-):
+    _user: Annotated[dict[str, Any], Depends(get_current_user)],
+) -> list[dict[str, Any]]:
     """Return all include/exclude word filters."""
     return await _repo(request).list_word_filters()
 
@@ -257,8 +277,8 @@ async def list_word_filters(
 async def create_word_filter(
     body: CreateWordFilterRequest,
     request: Request,
-    _user: Annotated[dict, Depends(require_admin)],
-):
+    _user: Annotated[dict[str, Any], Depends(require_admin)],
+) -> dict[str, Any]:
     """Add a word to the include or exclude filter list (admin only)."""
     if body.filter_type not in ("include", "exclude"):
         raise HTTPException(
@@ -292,8 +312,8 @@ async def create_word_filter(
 async def delete_word_filter(
     filter_id: int,
     request: Request,
-    _user: Annotated[dict, Depends(require_admin)],
-):
+    _user: Annotated[dict[str, Any], Depends(require_admin)],
+) -> dict[str, str]:
     """Remove a word filter by id (admin only)."""
     repo = _repo(request)
     filters = await repo.list_word_filters()
@@ -315,39 +335,90 @@ _DEFAULT_MIN_CONFIDENCE = 0.0
 class UpdateParamsRequest(BaseModel):
     """Payload for updating news engine parameters."""
 
-    min_confidence: float
+    min_confidence: Optional[float] = None
+    poll_interval_minutes: Optional[float] = None
+    finbert_enabled: Optional[bool] = None
 
 
 @router.get("/params")
 async def get_params(
     request: Request,
-    _user: Annotated[dict, Depends(get_current_user)],
-):
+    _user: Annotated[dict[str, Any], Depends(get_current_user)],
+) -> dict[str, float]:
     """Return current news engine parameters."""
     repo = _repo(request)
     raw = await repo.get_param(
         _PARAM_MIN_CONFIDENCE,
         str(_DEFAULT_MIN_CONFIDENCE),
     )
-    return {"min_confidence": float(raw)}
+    poll_raw = await repo.get_param("poll_interval_minutes", "5")
+    engine = _get_engine(request)
+    finbert_default = (
+        "1"
+        if (engine is not None and engine.sentiment_model_name != "vader")
+        else "0"
+    )
+    finbert_raw = await repo.get_param("finbert_enabled", finbert_default)
+    finbert_enabled = str(finbert_raw).strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    return {
+        "min_confidence": float(raw),
+        "poll_interval_minutes": float(poll_raw),
+        "finbert_enabled": finbert_enabled,
+    }
 
 
-@router.put("/params")
+@router.put(
+    "/params",
+    responses={
+        400: {
+            "description": (
+                "min_confidence must be between 0.0 and 1.0."
+            )
+        }
+    },
+)
 async def update_params(
     body: UpdateParamsRequest,
     request: Request,
-    _user: Annotated[dict, Depends(require_admin)],
-):
+    _user: Annotated[dict[str, Any], Depends(require_admin)],
+) -> dict[str, Any]:
     """Update news engine parameters (admin only)."""
-    if not 0.0 <= body.min_confidence <= 1.0:
+    if (
+        body.min_confidence is not None
+        and not 0.0 <= body.min_confidence <= 1.0
+    ):
         raise HTTPException(
             status_code=400,
             detail="min_confidence must be between 0.0 and 1.0.",
         )
+    if (
+        body.poll_interval_minutes is not None
+        and body.poll_interval_minutes < 1
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="poll_interval_minutes must be at least 1 minute.",
+        )
     repo = _repo(request)
-    await repo.set_param(
-        _PARAM_MIN_CONFIDENCE, str(body.min_confidence)
-    )
+    if body.min_confidence is not None:
+        await repo.set_param(
+            _PARAM_MIN_CONFIDENCE, str(body.min_confidence)
+        )
+    if body.poll_interval_minutes is not None:
+        await repo.set_param(
+            "poll_interval_minutes",
+            str(body.poll_interval_minutes),
+        )
+    if body.finbert_enabled is not None:
+        await repo.set_param(
+            "finbert_enabled",
+            "1" if body.finbert_enabled else "0",
+        )
     await _trigger_reload(request)
     engine = getattr(request.app.state, "news_engine", None)
     refresh_started = False
@@ -355,5 +426,45 @@ async def update_params(
         refresh_started = engine.trigger_refresh_cycle()
     return {
         "min_confidence": body.min_confidence,
+        "poll_interval_minutes": body.poll_interval_minutes,
+        "finbert_enabled": body.finbert_enabled,
         "refresh_started": refresh_started,
     }
+
+
+@router.get(
+    "/articles",
+    responses={503: {"description": "News engine not available."}},
+)
+async def list_articles(
+    request: Request,
+    _user: Annotated[dict[str, Any], Depends(get_current_user)],
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """Return recent crypto news articles for the feed page."""
+    engine = _get_engine(request)
+    if engine is None:
+        raise HTTPException(
+            status_code=503,
+            detail="News engine not available.",
+        )
+    return await engine.store.get_latest_articles(limit=limit)
+
+
+@router.get(
+    "/overview",
+    responses={503: {"description": "News engine not available."}},
+)
+async def get_overview(
+    request: Request,
+    _user: Annotated[dict[str, Any], Depends(get_current_user)],
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Return the weighted crypto sentiment overview."""
+    engine = _get_engine(request)
+    if engine is None:
+        raise HTTPException(
+            status_code=503,
+            detail="News engine not available.",
+        )
+    return await engine.store.get_news_overview(limit=limit)

@@ -5,6 +5,7 @@ API routes, and manages startup / shutdown lifecycle.
 """
 
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -47,9 +48,18 @@ except ImportError:
 
 
 async def _seed_news_defaults(repo) -> None:
-    """Seed RSS feeds and coin mappings into DB if tables are empty."""
+    """Seed default RSS feeds and coin mappings in an empty database.
+
+    Args:
+        repo: News settings repository instance.
+    """
     import json
     import os
+
+    def _load_mapping_file(path: str) -> dict:
+        """Read and parse coin mapping JSON from disk."""
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
 
     if await repo.count_feeds() == 0:
         try:
@@ -75,8 +85,10 @@ async def _seed_news_defaults(repo) -> None:
                 "coin_mapping.json",
             )
             mapping_path = os.path.normpath(mapping_path)
-            with open(mapping_path, encoding="utf-8") as fh:
-                data = json.load(fh)
+            data = await asyncio.to_thread(
+                _load_mapping_file,
+                mapping_path,
+            )
             ambiguous = set(data.get("ambiguous_symbols", []))
             for name, symbol in data.get("coins", {}).items():
                 await repo.create_coin_mapping(
@@ -127,6 +139,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     auth_service = AuthService(config, user_repo)
     await auth_service.ensure_admin_exists()
+    if db.legacy_admin_password_reset_required:
+        await auth_service.reset_legacy_admin_credentials()
     app.state.auth_service = auth_service
 
     cache_service = CacheService()
@@ -203,7 +217,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="TradeBot Manager",
-        version="0.2.0",
+        version="0.2.7",
         lifespan=lifespan,
     )
 

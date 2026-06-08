@@ -38,17 +38,17 @@
               <td colspan="3" style="padding: 0">
                 <div class="edit-row">
                   <div class="form-group" style="margin-bottom: 0">
-                    <label class="form-label">API Key</label>
+                    <div class="form-label">API Key</div>
                     <input class="form-input" [(ngModel)]="editForm.api_key"
                            placeholder="Leave empty to keep current">
                   </div>
                   <div class="form-group" style="margin-bottom: 0">
-                    <label class="form-label">API Secret</label>
+                    <div class="form-label">API Secret</div>
                     <input class="form-input" type="password" [(ngModel)]="editForm.api_secret"
                            placeholder="Leave empty to keep current">
                   </div>
                   <div class="form-group" style="margin-bottom: 0">
-                    <label class="form-label">Rate Limit</label>
+                    <div class="form-label">Rate Limit</div>
                     <input class="form-input" type="number" [(ngModel)]="editForm.rate_limit">
                   </div>
                   <div style="display: flex; gap: 8px; align-items: flex-end">
@@ -69,19 +69,19 @@
     <h3 class="mono" style="margin-bottom: 12px">Add Exchange</h3>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
       <div class="form-group">
-        <label class="form-label">Name</label>
+        <div class="form-label">Name</div>
         <input class="form-input" [(ngModel)]="newExchange.name" placeholder="bitvavo">
       </div>
       <div class="form-group">
-        <label class="form-label">Rate Limit</label>
+        <div class="form-label">Rate Limit</div>
         <input class="form-input" type="number" [(ngModel)]="newExchange.rate_limit">
       </div>
       <div class="form-group">
-        <label class="form-label">API Key</label>
+        <div class="form-label">API Key</div>
         <input class="form-input" [(ngModel)]="newExchange.api_key" placeholder="API key">
       </div>
       <div class="form-group">
-        <label class="form-label">API Secret</label>
+        <div class="form-label">API Secret</div>
         <input class="form-input" type="password" [(ngModel)]="newExchange.api_secret" placeholder="API secret">
       </div>
     </div>
@@ -93,7 +93,7 @@
     <h2 class="mono text-blue" style="margin-bottom: 16px">User Preferences</h2>
 
     <div class="form-group" style="max-width: 260px; margin-bottom: 16px">
-      <label class="form-label">Language</label>
+      <div class="form-label">Language</div>
       <app-dropdown
         [options]="languageOptions"
         [(value)]="language"
@@ -103,7 +103,7 @@
     </div>
 
     <div class="form-group" style="max-width: 260px; margin-bottom: 0">
-      <label class="form-label">Date/Time Display</label>
+      <div class="form-label">Date/Time Display</div>
       <app-dropdown
         [options]="timeDisplayOptions"
         [(value)]="timeDisplay"
@@ -123,38 +123,78 @@
     <h2 class="mono text-blue" style="margin-bottom: 16px">RSS Feeds</h2>
     <table class="table">
       <thead>
-        <tr><th>Name</th><th>URL</th><th>Enabled</th><th>Actions</th></tr>
+        <tr><th>Name</th><th>URL</th><th>Type</th><th>Weight</th><th>Enabled</th><th>Actions</th></tr>
       </thead>
       <tbody>
         @for (feed of feeds; track feed.id) {
-          <tr>
-            <td class="mono">{{ feed.name }}</td>
-            <td class="mono text-muted" style="font-size:12px; word-break:break-all">{{ feed.url }}</td>
-            <td>
-              <label class="toggle">
-                <input type="checkbox" [checked]="feed.enabled" (change)="toggleFeed(feed)">
-                <span class="toggle-slider"></span>
-              </label>
-            </td>
-            <td>
-              <button class="btn btn-sm btn-danger" (click)="deleteFeed(feed)">Delete</button>
-            </td>
-          </tr>
+          @if (editingFeedId === feed.id) {
+            <tr>
+              <td><input class="form-input" [(ngModel)]="editFeedForm.name"></td>
+              <td><input class="form-input" [(ngModel)]="editFeedForm.url" style="word-break:break-all"></td>
+              <td style="min-width: 150px">
+                <app-dropdown
+                  [options]="feedTypeOptions"
+                  [(value)]="editFeedForm.source_type"
+                  style="width: 100%; display:block">
+                </app-dropdown>
+              </td>
+              <td><input class="form-input" type="number" step="0.1" min="0.1" [(ngModel)]="editFeedForm.weight"></td>
+              <td>
+                <div class="toggle">
+                  <input type="checkbox" [checked]="feed.enabled" (change)="toggleFeed(feed)">
+                  <span class="toggle-slider"></span>
+                </div>
+              </td>
+              <td>
+                <button class="btn btn-sm btn-primary" (click)="saveFeedEdit(feed)">Save</button>
+                <button class="btn btn-sm" (click)="cancelEditFeed()">Cancel</button>
+              </td>
+            </tr>
+          } @else {
+            <tr>
+              <td class="mono">{{ feed.name }}</td>
+              <td class="mono text-muted" style="font-size:12px; word-break:break-all">{{ feed.url }}</td>
+              <td class="mono">{{ feed.source_type }}</td>
+              <td class="mono">{{ feed.weight | number:'1.0-2' }}</td>
+              <td>
+                <div class="toggle">
+                  <input type="checkbox" [checked]="feed.enabled" (change)="toggleFeed(feed)">
+                  <span class="toggle-slider"></span>
+                </div>
+              </td>
+              <td>
+                <button class="btn btn-sm" (click)="startEditFeed(feed)">Edit</button>
+                <button class="btn btn-sm btn-danger" (click)="deleteFeed(feed)">Delete</button>
+              </td>
+            </tr>
+          }
         } @empty {
-          <tr><td colspan="4" class="text-muted" style="text-align:center">No feeds configured.</td></tr>
+          <tr><td colspan="6" class="text-muted" style="text-align:center">No feeds configured.</td></tr>
         }
       </tbody>
     </table>
     <hr style="border-color: var(--border-color); margin: 20px 0">
     <h3 class="mono" style="margin-bottom: 12px">Add Feed</h3>
-    <div style="display: grid; grid-template-columns: 1fr 2fr auto; gap: 12px; align-items: flex-end">
+    <div style="display: grid; grid-template-columns: 1fr 2fr 160px 120px auto; gap: 12px; align-items: flex-end">
       <div class="form-group" style="margin-bottom: 0">
-        <label class="form-label">Name</label>
+        <div class="form-label">Name</div>
         <input class="form-input" [(ngModel)]="newFeed.name" placeholder="CoinDesk">
       </div>
       <div class="form-group" style="margin-bottom: 0">
-        <label class="form-label">RSS URL</label>
-        <input class="form-input" [(ngModel)]="newFeed.url" placeholder="https://…/feed">
+        <div class="form-label">URL</div>
+        <input class="form-input" [(ngModel)]="newFeed.url" placeholder="https://…/feed-or-article">
+      </div>
+      <div class="form-group" style="margin-bottom: 0">
+        <div class="form-label">Type</div>
+        <app-dropdown
+          [options]="feedTypeOptions"
+          [(value)]="newFeed.source_type"
+          style="width: 100%; display:block">
+        </app-dropdown>
+      </div>
+      <div class="form-group" style="margin-bottom: 0">
+        <div class="form-label">Weight</div>
+        <input class="form-input" type="number" step="0.1" min="0.1" [(ngModel)]="newFeed.weight">
       </div>
       <button class="btn btn-primary" (click)="addFeed()">Add</button>
     </div>
@@ -178,10 +218,10 @@
               <td><input class="form-input" [(ngModel)]="editMappingForm.name"></td>
               <td><input class="form-input" [(ngModel)]="editMappingForm.symbol" style="text-transform:uppercase"></td>
               <td>
-                <label class="toggle">
+                <div class="toggle">
                   <input type="checkbox" [(ngModel)]="editMappingForm.ambiguous">
                   <span class="toggle-slider"></span>
-                </label>
+                </div>
               </td>
               <td>
                 <button class="btn btn-sm btn-primary" (click)="saveEditMapping(m)">Save</button>
@@ -214,19 +254,19 @@
     <h3 class="mono" style="margin-bottom: 12px">Add Mapping</h3>
     <div style="display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 12px; align-items: flex-end">
       <div class="form-group" style="margin-bottom: 0">
-        <label class="form-label">Coin Name</label>
+        <div class="form-label">Coin Name</div>
         <input class="form-input" [(ngModel)]="newCoinMapping.name" placeholder="bitcoin">
       </div>
       <div class="form-group" style="margin-bottom: 0">
-        <label class="form-label">Symbol</label>
+        <div class="form-label">Symbol</div>
         <input class="form-input" [(ngModel)]="newCoinMapping.symbol" placeholder="BTC" style="text-transform:uppercase">
       </div>
       <div class="form-group" style="margin-bottom: 0">
-        <label class="form-label">Ambiguous</label>
-        <label class="toggle" style="margin-top: 8px; display:block">
+        <div class="form-label">Ambiguous</div>
+        <div class="toggle" style="margin-top: 8px; display:block">
           <input type="checkbox" [(ngModel)]="newCoinMapping.ambiguous">
           <span class="toggle-slider"></span>
-        </label>
+        </div>
       </div>
       <button class="btn btn-primary" style="align-self:flex-end" (click)="addCoinMapping()">Add</button>
     </div>
@@ -236,15 +276,15 @@
   <div class="card" style="margin-bottom: 24px">
     <h2 class="mono text-blue" style="margin-bottom: 4px">Engine Parameters</h2>
     <p class="text-muted" style="margin-bottom: 20px; font-size: 13px">
-      Only signals meeting these thresholds are stored and shown in the dashboard.
+      News sources are re-checked on this schedule and low-confidence signals are filtered before they reach the dashboard.
     </p>
 
     <div class="confidence-row">
       <div class="form-group" style="margin-bottom: 0; flex: 1">
-        <label class="form-label">
+        <div class="form-label">
           Minimum Confidence &nbsp;
           <span class="mono text-blue">{{ (minConfidence * 100).toFixed(0) }}%</span>
-        </label>
+        </div>
         <input
           type="range"
           class="confidence-slider"
@@ -254,6 +294,20 @@
           <span>0% (all signals)</span>
           <span>50%</span>
           <span>100% (only highest)</span>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom: 0; width: 220px">
+        <div class="form-label">News refresh every x minutes</div>
+        <input class="form-input" type="number" min="1" step="1" [(ngModel)]="pollIntervalMinutes">
+      </div>
+      <div class="form-group" style="margin-bottom: 0; width: 220px">
+        <div class="form-label">FinBERT sentiment model</div>
+        <div class="toggle" style="margin-top: 10px; display:block">
+          <input type="checkbox" [(ngModel)]="finbertEnabled">
+          <span class="toggle-slider"></span>
+        </div>
+        <div class="text-muted" style="font-size: 12px; margin-top: 8px">
+          Global toggle for all news sources. When enabled, sentiment uses FinBERT + VADER ensemble.
         </div>
       </div>
       <button
@@ -317,11 +371,11 @@
     <h3 class="mono" style="margin-bottom: 12px">Add Filter</h3>
     <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: flex-end">
       <div class="form-group" style="margin-bottom: 0">
-        <label class="form-label">Word</label>
+        <div class="form-label">Word</div>
         <input class="form-input" [(ngModel)]="newWord" placeholder="e.g. scam" (keyup.enter)="addWordFilter()">
       </div>
       <div class="form-group" style="margin-bottom: 0">
-        <label class="form-label">Type</label>
+        <div class="form-label">Type</div>
         <select class="form-input" [(ngModel)]="newWordType">
           <option value="exclude">Exclude</option>
           <option value="include">Include</option>

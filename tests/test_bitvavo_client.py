@@ -2,6 +2,9 @@
 
 import hashlib
 import hmac
+from unittest.mock import AsyncMock
+
+import pytest
 
 from manager.exchanges.bitvavo.client import BitvavoClient
 from manager.models import OrderSide, OrderStatus, OrderType
@@ -129,6 +132,103 @@ class TestBitvavoParser:
         assert market.quote == "EUR"
         assert market.quantity_decimals == 8
         assert market.tick_size == "0.00001"
+
+
+class TestBitvavoFormatting:
+    """Verify outbound numeric formatting for order payloads."""
+
+    def test_format_decimal_floor_max_8_digits(self):
+        """Trim decimals beyond 8 digits by rounding down."""
+        value = BitvavoClient._format_decimal_floor("1.123456789")
+        assert value == "1.12345678"
+
+    def test_format_decimal_floor_removes_trailing_zeros(self):
+        """Keep a plain non-scientific numeric string."""
+        value = BitvavoClient._format_decimal_floor("2.340000000")
+        assert value == "2.34"
+
+    def test_format_decimal_floor_small_value(self):
+        """Handle very small inputs with 8-digit floor precision."""
+        value = BitvavoClient._format_decimal_floor("0.000000019")
+        assert value == "0.00000001"
+
+    def test_format_decimal_floor_zero_decimals(self):
+        """Support whole-number floor mode when decimals are 0."""
+        value = BitvavoClient._format_decimal_floor("12.99", decimals=0)
+        assert value == "12"
+
+    def test_format_decimal_floor_two_decimals(self):
+        """Support market-level decimal clamps below 8 digits."""
+        value = BitvavoClient._format_decimal_floor("12.999", decimals=2)
+        assert value == "12.99"
+
+
+class TestBitvavoOrderPayloadFormatting:
+    """Verify create/update order payloads apply amount precision rules."""
+
+    @pytest.mark.asyncio
+    async def test_create_order_amount_uses_market_quantity_decimals(self):
+        """Clamp amount to min(8, quantityDecimals) before submit."""
+        client = BitvavoClient(api_key="k", api_secret="s")
+        client._get_amount_decimals = AsyncMock(return_value=2)
+
+        client._send_action = AsyncMock(return_value={
+            "response": {
+                "orderId": "o-1",
+                "market": "BTC-EUR",
+                "side": "buy",
+                "orderType": "limit",
+                "status": "new",
+                "created": 1,
+                "updated": 1,
+            }
+        })
+
+        await client.create_order(
+            market="BTC-EUR",
+            side=OrderSide.BUY,
+            order_type=OrderType.LIMIT,
+            operator_id=1,
+            amount="1.2399",
+            price="100",
+        )
+
+        args = client._send_action.await_args.args
+        assert args[0] == "privateCreateOrder"
+        body = args[1]
+        assert body["amount"] == "1.23"
+
+    @pytest.mark.asyncio
+    async def test_update_order_amount_remaining_uses_market_decimals(self):
+        """Clamp amountRemaining using same market precision policy."""
+        client = BitvavoClient(api_key="k", api_secret="s")
+        client._get_amount_decimals = AsyncMock(return_value=3)
+
+        client._send_action = AsyncMock(return_value={
+            "response": {
+                "orderId": "o-2",
+                "market": "BTC-EUR",
+                "side": "buy",
+                "orderType": "limit",
+                "status": "new",
+                "created": 1,
+                "updated": 1,
+            }
+        })
+
+        await client.update_order(
+            market="BTC-EUR",
+            order_id="o-2",
+            operator_id=1,
+            amount="2.98765",
+            amount_remaining="1.12399",
+        )
+
+        args = client._send_action.await_args.args
+        assert args[0] == "privateUpdateOrder"
+        body = args[1]
+        assert body["amount"] == "2.987"
+        assert body["amountRemaining"] == "1.123"
 
 
 class TestExchangeRegistry:

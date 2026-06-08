@@ -8,6 +8,7 @@ and parses with feedparser.  Applies exponential backoff on HTTP
 import asyncio
 import logging
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 import aiohttp
 import feedparser
@@ -24,10 +25,25 @@ class RssClient:
     """Async RSS feed fetcher with per-feed backoff tracking."""
 
     def __init__(self) -> None:
+        """Initialize HTTP session holder and per-source backoff map."""
         self._session: Optional[aiohttp.ClientSession] = None
         self._backoff: dict[str, float] = {}
+        self._allowed_urls: set[str] = set(get_allowed_urls())
 
-    async def _ensure_session(self) -> aiohttp.ClientSession:
+    def set_allowed_urls(self, urls: list[str] | set[str]) -> None:
+        """Replace feed allowlist with runtime-configured source URLs.
+
+        Args:
+            urls: Allowed feed URLs.
+        """
+        self._allowed_urls = {u for u in urls if u}
+
+    def _ensure_session(self) -> aiohttp.ClientSession:
+        """Create or reuse the internal aiohttp session.
+
+        Returns:
+            Active ``aiohttp.ClientSession`` instance.
+        """
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=30)
@@ -35,9 +51,16 @@ class RssClient:
         return self._session
 
     async def fetch_feed(self, url: str) -> list[dict[str, Any]]:
-        """Fetch and parse an RSS feed, returning raw entry dicts."""
-        allowed = get_allowed_urls()
-        if url not in allowed:
+        """Fetch and parse one RSS/Atom feed.
+
+        Args:
+            url: Feed url.
+
+        Returns:
+            List of raw feed entries, or empty list on failure/validation
+            issues/backoff responses.
+        """
+        if self._allowed_urls and url not in self._allowed_urls:
             logger.warning(
                 "RSS URL not in allowlist, skipping: %s", url
             )
@@ -50,7 +73,7 @@ class RssClient:
             )
             await asyncio.sleep(backoff)
 
-        session = await self._ensure_session()
+        session = self._ensure_session()
         try:
             async with session.get(url) as resp:
                 if resp.status in (429, 503):
@@ -81,11 +104,38 @@ class RssClient:
                 feed = feedparser.parse(raw)
                 return feed.entries or []
 
-        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
-            logger.error("Failed to fetch %s: %s", url, exc)
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            logger.exception("Failed to fetch %s", url)
             return []
 
+    async def fetch_page(self, url: str) -> str:
+        """Fetch generic html content for scrape-style sources.
+
+        Args:
+            url: Page url.
+
+        Returns:
+            Page html on success, otherwise empty string.
+        """
+        if urlparse(url).scheme not in ("http", "https"):
+            logger.warning("Unsupported URL scheme for scraping: %s", url)
+            return ""
+        session = self._ensure_session()
+        try:
+            async with session.get(url) as resp:
+                if resp.status >= 400:
+                    logger.warning(
+                        "HTML fetch failed for %s with status %d",
+                        url,
+                        resp.status,
+                    )
+                    return ""
+                return await resp.text()
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            logger.exception("Failed to fetch page %s", url)
+            return ""
+
     async def close(self) -> None:
-        """Close the underlying HTTP session."""
+        """Close underlying aiohttp session when open."""
         if self._session and not self._session.closed:
             await self._session.close()

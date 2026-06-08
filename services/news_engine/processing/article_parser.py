@@ -118,5 +118,7 @@ class ArticleParser:
             title=article.title,
             url=article.url,
             source=article.source,
+            source_type=article.source_type,
+            source_weight=article.source_weight,
             timestamp=article.timestamp,
         )

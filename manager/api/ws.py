@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from manager.constants import (
+    WS_TYPE_BUDGET_SNAPSHOT,
     WS_TYPE_BOT_LOG,
     WS_TYPE_BOT_STATUS,
     WS_TYPE_ERROR,
@@ -217,6 +218,8 @@ async def _handle_worker_message(
         await _handle_worker_error(app, agent_id, msg)
     elif msg_type == WS_TYPE_ORDER_UPDATE:
         await _handle_order_update(app, msg)
+    elif msg_type == WS_TYPE_BUDGET_SNAPSHOT:
+        await _handle_budget_snapshot(app, msg)
 
 
 async def _handle_bot_status(
@@ -339,9 +342,33 @@ async def _handle_order_update(
             "Ignoring order_update for unknown bot_id=%s", bot_id
         )
         return
+
+    exchange_order_id = msg.get("exchange_order_id", "")
+    if not exchange_order_id:
+        logger.warning(
+            "Ignoring order_update for bot_id=%s without exchange_order_id",
+            bot_id,
+        )
+        return
+
+    operator_raw = msg.get("operator_id")
+    try:
+        operator_id = int(operator_raw)
+    except (TypeError, ValueError):
+        operator_id = None
+    if operator_id != bot.get("operator_id"):
+        logger.warning(
+            "Ignoring order_update for bot_id=%s due operator mismatch: "
+            "msg=%s bot=%s",
+            bot_id,
+            operator_raw,
+            bot.get("operator_id"),
+        )
+        return
+
     order_id = await app.state.order_repo.create(
         bot_id=bot_id,
-        exchange_order_id=msg.get("exchange_order_id", ""),
+        exchange_order_id=exchange_order_id,
         market=msg.get("market", ""),
         side=msg.get("side", ""),
         order_type=msg.get("order_type", ""),
@@ -355,7 +382,7 @@ async def _handle_order_update(
         "order": {
             "id": order_id,
             "bot_id": bot_id,
-            "exchange_order_id": msg.get("exchange_order_id", ""),
+            "exchange_order_id": exchange_order_id,
             "market": msg.get("market", ""),
             "side": msg.get("side", ""),
             "order_type": msg.get("order_type", ""),
@@ -364,3 +391,39 @@ async def _handle_order_update(
             "price": msg.get("price", ""),
         },
     })
+
+
+async def _handle_budget_snapshot(app: Any, msg: dict) -> None:
+    """Persist and forward bot budget snapshots from worker runtime."""
+    bot_id = msg.get("bot_id")
+    if not bot_id:
+        return
+
+    bot = await app.state.bot_service.get_bot(bot_id)
+    if not bot:
+        logger.warning(
+            "Ignoring budget_snapshot for unknown bot_id=%s", bot_id
+        )
+        return
+
+    raw_balance = msg.get("balance")
+    try:
+        balance = float(raw_balance)
+    except (TypeError, ValueError):
+        logger.warning(
+            "Ignoring invalid budget_snapshot balance for bot_id=%s: %s",
+            bot_id,
+            raw_balance,
+        )
+        return
+
+    await app.state.budget_service.record_snapshot(bot_id, balance)
+
+    await manager.broadcast_ui(
+        {
+            "type": WS_TYPE_BUDGET_SNAPSHOT,
+            "bot_id": bot_id,
+            "balance": balance,
+            "price": msg.get("price", ""),
+        }
+    )

@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-ARG ENABLE_FINBERT=0
+ARG ENABLE_FINBERT=1
 
 COPY pyproject.toml ./
 RUN pip install --no-cache-dir . && \

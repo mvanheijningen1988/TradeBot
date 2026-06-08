@@ -30,6 +30,13 @@ class BotRunner:
         config: dict,
         client: ManagerClient,
     ) -> None:
+        """Initialize a runner for one bot.
+
+        Args:
+            bot_id: Bot identifier.
+            config: Bot runtime configuration payload.
+            client: Manager communication client.
+        """
         self.bot_id = bot_id
         self.config = config
         self._client = client
@@ -39,7 +46,11 @@ class BotRunner:
         self._report_stopped_on_exit = True
 
     async def run(self) -> None:
-        """Main bot execution loop."""
+        """Run bot lifecycle until stopped or failed.
+
+        The method initializes strategy/exchange dependencies, reports
+        lifecycle states, and drives strategy tick updates.
+        """
         correlation_id = str(uuid.uuid4())[:12]
         strategy = None
         try:
@@ -79,6 +90,18 @@ class BotRunner:
                 )
 
             strategy.set_order_callback(_strategy_order)
+
+            async def _strategy_budget(budget_data: dict) -> None:
+                balance = budget_data.get("balance", "0")
+                price = budget_data.get("price", "0")
+                await self._client.send_budget_snapshot(
+                    self.bot_id,
+                    balance=str(balance),
+                    price=str(price),
+                )
+
+            if hasattr(strategy, "set_budget_callback"):
+                strategy.set_budget_callback(_strategy_budget)
 
             await self._client.send_bot_status(
                 self.bot_id, BOT_STATUS_RUNNING
@@ -140,7 +163,12 @@ class BotRunner:
         report_stopped: bool = True,
         cancel_strategy: bool = True,
     ) -> None:
-        """Stop the bot gracefully."""
+        """Stop the bot and optionally cancel strategy exchange state.
+
+        Args:
+            report_stopped: Whether to emit stopped status to manager.
+            cancel_strategy: Whether to call ``strategy.stop()`` on exit.
+        """
         self._report_stopped_on_exit = report_stopped
         self._cancel_strategy_on_exit = cancel_strategy
         self._running = False
@@ -154,13 +182,19 @@ class BotRunner:
             )
 
     def attach_task(self, task: asyncio.Task) -> None:
-        """Attach the runner task so stop() can cancel and await it."""
+        """Attach active runner task for coordinated cancellation.
+
+        Args:
+            task: Asyncio task executing ``run()`` wrapper logic.
+        """
         self._task = task
 
     async def _create_strategy(self):
         """Instantiate the strategy from config.
 
-        Returns the strategy instance or None on failure.
+        Returns:
+            Strategy instance when config/registry resolution succeeds;
+            otherwise ``None``.
         """
         from manager.strategies import StrategyRegistry
         from manager.strategies.base import StrategyConfig

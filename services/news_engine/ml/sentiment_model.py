@@ -79,6 +79,26 @@ class SentimentModel:
         """Return True when FinBERT is loaded and available."""
         return self._transformer_pipeline is not None
 
+    def set_finbert_enabled(self, enabled: bool) -> bool:
+        """Enable or disable FinBERT at runtime.
+
+        Args:
+            enabled: Target enabled state.
+
+        Returns:
+            True when FinBERT is currently active after applying the
+            request, otherwise False.
+        """
+        if enabled:
+            if self._transformer_pipeline is None:
+                self._load_transformer()
+            return self._transformer_pipeline is not None
+
+        if self._transformer_pipeline is not None:
+            self._transformer_pipeline = None
+            logger.info("FinBERT transformer model disabled.")
+        return False
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------

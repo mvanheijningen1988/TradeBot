@@ -106,43 +106,22 @@ class BudgetService:
         await self._budget_repo.record(bot_id, balance)
 
     async def get_history(
-        self, bot_id: int, limit: int = 500
+        self,
+        bot_id: int,
+        limit: int = 500,
+        since_minutes: int | None = None,
     ) -> list[dict]:
         """Return budget history for a bot."""
-        return await self._budget_repo.get_history(bot_id, limit)
+        return await self._budget_repo.get_history(
+            bot_id,
+            limit,
+            since_minutes,
+        )
 
-    async def get_all_history(self, limit: int = 500) -> list[dict]:
-        """Return budget history aggregated across all bots,
-        merged with wallet balance history when available."""
-        bot_rows = await self._budget_repo.get_all_history(limit)
-
-        if not self._wallet_repo:
-            return bot_rows
-
-        # Gather wallet balance history from all wallets.
-        wallet_rows: list[dict] = []
-        try:
-            all_wallets = await self._wallet_repo._db.fetch_all(
-                "SELECT id FROM wallets"
-            )
-            for w in all_wallets:
-                rows = await self._wallet_repo.get_balance_history(
-                    w["id"], limit
-                )
-                wallet_rows.extend(rows)
-        except Exception:
-            pass
-
-        if not wallet_rows:
-            return bot_rows
-
-        # Convert wallet rows to same shape as bot rows.
-        wallet_points = [
-            {"timestamp": r["timestamp"], "balance": r["balance"]}
-            for r in wallet_rows
-        ]
-
-        # Merge both lists, sort descending by timestamp, limit.
-        merged = bot_rows + wallet_points
-        merged.sort(key=lambda p: p["timestamp"], reverse=True)
-        return merged[:limit]
+    async def get_all_history(
+        self,
+        limit: int = 500,
+        since_minutes: int | None = None,
+    ) -> list[dict]:
+        """Return aggregated budget history across bot snapshots only."""
+        return await self._budget_repo.get_all_history(limit, since_minutes)

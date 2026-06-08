@@ -14,6 +14,7 @@ TABLES: list[str] = [
         role        TEXT    NOT NULL DEFAULT 'user',
         language    TEXT    NOT NULL DEFAULT 'en',
         time_display TEXT   NOT NULL DEFAULT 'local',
+        must_change_password INTEGER NOT NULL DEFAULT 0,
         created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
         updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
     )
@@ -175,6 +176,8 @@ TABLES: list[str] = [
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         name        TEXT    NOT NULL,
         url         TEXT    NOT NULL UNIQUE,
+        source_type TEXT    NOT NULL DEFAULT 'rss',
+        weight      REAL    NOT NULL DEFAULT 1.0,
         enabled     INTEGER NOT NULL DEFAULT 1,
         created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
     )

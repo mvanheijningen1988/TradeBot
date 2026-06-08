@@ -1,0 +1,101 @@
+<div class="page-content news-page">
+  <div class="page-header news-header">
+    <div>
+      <h1>Crypto News</h1>
+      <p class="text-muted news-subtitle">
+        Scraped pages and RSS feeds with weighted sentiment analysis.
+      </p>
+    </div>
+    <button class="btn btn-primary" (click)="refreshNow()">Refresh</button>
+  </div>
+
+  @if (overview) {
+    <section class="indicator-card card">
+      <div class="indicator-main">
+        <div class="indicator-pill" [class]="indicatorClass">
+          {{ indicatorText }}
+        </div>
+        <div class="indicator-score mono">
+          {{ overview.overall_score | number:'1.2-2' }}
+        </div>
+      </div>
+      <div class="indicator-meta">
+        <div><span class="text-muted">Articles</span><strong>{{ overview.article_count }}</strong></div>
+        <div><span class="text-muted">Positive</span><strong class="text-green">{{ overview.positive_count }}</strong></div>
+        <div><span class="text-muted">Negative</span><strong class="text-red">{{ overview.negative_count }}</strong></div>
+        <div><span class="text-muted">Neutral</span><strong>{{ overview.neutral_count }}</strong></div>
+      </div>
+      <p class="indicator-copy text-muted">
+        A positive day means the weighted sentiment is above zero after recency and source weighting.
+      </p>
+    </section>
+  } @else {
+    <section class="indicator-card card">
+      <div class="indicator-main">
+        <div class="indicator-pill indicator--neutral">Loading…</div>
+      </div>
+    </section>
+  }
+
+  <div class="card news-toolbar">
+    <div class="news-toolbar__group">
+      <span class="text-muted mono">Filter</span>
+      <app-dropdown
+        [options]="sentimentOptions"
+        [(value)]="selectedSentiment"
+        (valueChange)="loadNews()"
+        placeholder="All sentiment"
+        style="width: 180px">
+      </app-dropdown>
+    </div>
+    <div class="news-toolbar__group text-muted mono">
+      {{ filteredArticles.length }} shown of {{ articles.length }} loaded
+    </div>
+  </div>
+
+  <div class="card news-table-card">
+    <table class="table news-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Source</th>
+          <th>Title</th>
+          <th>Coins</th>
+          <th>Sentiment</th>
+          <th>Score</th>
+          <th>Summary</th>
+          <th>Raw Text</th>
+          <th>Link</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (article of filteredArticles; track article.url) {
+          <tr>
+            <td class="mono text-muted">{{ article.timestamp | appDateTime }}</td>
+            <td>
+              <div class="source-cell">
+                <span class="mono text-blue">{{ article.source }}</span>
+                <span class="source-type mono">{{ article.source_type }}</span>
+              </div>
+            </td>
+            <td class="news-title">{{ article.title }}</td>
+            <td class="mono news-coins">{{ formatCoins(article) }}</td>
+            <td><span class="badge" [class]="sentimentBadgeClass(article)">{{ sentimentLabel(article) }}</span></td>
+            <td class="mono" [class]="article.sentiment_score >= 0 ? 'text-green' : 'text-red'">
+              {{ article.sentiment_score | number:'1.2-2' }}
+            </td>
+            <td class="news-snippet">{{ truncate(article.summary || article.content) }}</td>
+            <td class="news-snippet news-snippet--raw">{{ truncate(article.content, 220) }}</td>
+            <td>
+              <a class="btn btn-sm btn-outline" [href]="article.url" target="_blank" rel="noreferrer">Open</a>
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="9" class="text-muted" style="text-align:center">No news articles yet.</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</div>

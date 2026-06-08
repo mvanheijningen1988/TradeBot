@@ -111,3 +111,8 @@ class MessageSender:
   This class provides methods to send messages to recipients with various priority levels. It handles message formatting and delivery.
   """
 ```
+
+### Complex logic
+For complex logic, provide inline comments explaining the code and the reasoning behind the implementation.
+Explanation should include the purpose of the code block, any important decisions made, and how it fits into the overall functionality.
+If there are any non-obvious algorithms or data structures used, explain them in detail.

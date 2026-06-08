@@ -79,6 +79,8 @@ class MartingaleStrategy(Strategy):
 
         # Current sell order.
         self._sell_order_id: Optional[str] = None
+        self._quote_balance: Decimal = Decimal(str(config.budget_quote))
+        self._base_balance: Decimal = Decimal("0")
 
     @staticmethod
     def name() -> str:
@@ -117,6 +119,10 @@ class MartingaleStrategy(Strategy):
             raise ValueError("take_profit_pct must be > 0.")
 
         self._state = StrategyState.RUNNING
+        await self._report_budget(
+            balance=str(self._quote_balance),
+            price="0",
+        )
 
         # Place initial market buy.
         await self._execute_buy(Decimal(str(cfg.initial_amount_quote)))
@@ -150,10 +156,16 @@ class MartingaleStrategy(Strategy):
         """Check if price triggers a new buy-in or stop-loss."""
         if self._state != StrategyState.RUNNING:
             return
+        current_price = Decimal(price)
+        equity = self._quote_balance + (self._base_balance * current_price)
+        await self._report_budget(
+            balance=str(equity),
+            price=str(current_price),
+        )
+
         if self._total_base <= 0:
             return
 
-        current_price = Decimal(price)
         if await self._handle_stop_loss(current_price):
             return
 
@@ -272,12 +284,16 @@ class MartingaleStrategy(Strategy):
         """Place a market buy and update position tracking."""
         cfg = self._config
         try:
+            client_order_id = self._next_client_order_id(
+                f"buy:{self._buy_in_count + 1}"
+            )
             order = await self._exchange.create_order(
                 market=cfg.market,
                 side=OrderSide.BUY,
                 order_type=OrderType.MARKET,
                 operator_id=cfg.operator_id,
                 amount_quote=str(amount_quote),
+                client_order_id=client_order_id,
             )
 
             filled = Decimal(order.filled_amount or "0")
@@ -285,8 +301,22 @@ class MartingaleStrategy(Strategy):
                 order.filled_amount_quote or str(amount_quote)
             )
 
+            fee_paid = Decimal(order.fee_paid or "0")
+            fee_currency = (order.fee_currency or "").upper()
+            quote_symbol = cfg.market.split("-")[1].upper()
+            base_symbol = cfg.market.split("-")[0].upper()
+            if fee_paid > 0 and fee_currency == quote_symbol:
+                filled_quote += fee_paid
+            if fee_paid > 0 and fee_currency == base_symbol:
+                filled = max(Decimal("0"), filled - fee_paid)
+
             self._total_base += filled
             self._total_quote_spent += filled_quote
+            self._quote_balance = max(
+                Decimal("0"),
+                self._quote_balance - filled_quote,
+            )
+            self._base_balance += filled
             self._buy_in_count += 1
 
             if self._total_base > 0:
@@ -340,15 +370,27 @@ class MartingaleStrategy(Strategy):
                     pass
                 self._sell_order_id = None
 
+            client_order_id = self._next_client_order_id("stoploss-sell")
             order = await self._exchange.create_order(
                 market=cfg.market,
                 side=OrderSide.SELL,
                 order_type=OrderType.MARKET,
                 operator_id=cfg.operator_id,
                 amount=str(self._total_base),
+                client_order_id=client_order_id,
             )
 
             received = Decimal(order.filled_amount_quote or "0")
+            sold_base = Decimal(order.filled_amount or str(self._total_base))
+            fee_paid = Decimal(order.fee_paid or "0")
+            fee_currency = (order.fee_currency or "").upper()
+            quote_symbol = cfg.market.split("-")[1].upper()
+            base_symbol = cfg.market.split("-")[0].upper()
+            if fee_paid > 0 and fee_currency == quote_symbol:
+                received = max(Decimal("0"), received - fee_paid)
+            if fee_paid > 0 and fee_currency == base_symbol:
+                sold_base += fee_paid
+
             loss = self._total_quote_spent - received
             self._total_profit -= loss
             logger.warning(
@@ -364,6 +406,11 @@ class MartingaleStrategy(Strategy):
             self._avg_entry_price = Decimal("0")
             self._buy_in_count = 0
             self._last_buy_price = Decimal("0")
+            self._quote_balance += received
+            self._base_balance = max(
+                Decimal("0"),
+                self._base_balance - sold_base,
+            )
             self._state = StrategyState.STOPPED
 
         except Exception:
@@ -374,6 +421,9 @@ class MartingaleStrategy(Strategy):
         """Place a limit sell order at the take-profit price."""
         cfg = self._config
         try:
+            client_order_id = self._next_client_order_id(
+                f"tp:{tp_price}"
+            )
             order = await self._exchange.create_order(
                 market=cfg.market,
                 side=OrderSide.SELL,
@@ -381,6 +431,7 @@ class MartingaleStrategy(Strategy):
                 operator_id=cfg.operator_id,
                 amount=str(self._total_base),
                 price=str(tp_price),
+                client_order_id=client_order_id,
             )
             self._sell_order_id = order.order_id
             logger.info(

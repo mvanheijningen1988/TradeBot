@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile.manager
       args:
-        ENABLE_FINBERT: ${ENABLE_FINBERT:-0}
+        ENABLE_FINBERT: ${ENABLE_FINBERT:-1}
     ports:
       - "8000:8000"
     volumes:

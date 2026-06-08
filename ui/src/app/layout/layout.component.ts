@@ -49,7 +49,12 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.auth.loadUser();
-    this.auth.currentUser$.subscribe((u: User | null) => this.currentUser = u);
+    this.auth.currentUser$.subscribe((u: User | null) => {
+      this.currentUser = u;
+      if (u?.must_change_password && this.router.url !== '/change-password') {
+        this.router.navigate(['/change-password']);
+      }
+    });
 
     // Load initial pending worker count from REST API (badge only, no toast).
     this.workerService.list().subscribe((workers) => {
