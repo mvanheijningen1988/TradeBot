@@ -146,6 +146,13 @@ This repository now includes two CI/CD workflows:
         - `MAJOR`
         - `latest` (latest for that component image)
 
+- `.github/workflows/manual-docker-release.yml`
+    - Trigger: Manual dispatch from GitHub Actions UI.
+    - Allows you to choose which branch (`development` or `main`) to release.
+    - Optionally specify components to release (all, manager, worker, ui, or comma-separated).
+    - Validates inputs and provides a clear summary of the release operation.
+    - Use this workflow to manually trigger a release without pushing to a branch.
+
     ## Branching Strategy
 
     - Create `development` from `main`.
