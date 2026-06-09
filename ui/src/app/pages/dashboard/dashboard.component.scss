@@ -104,6 +104,57 @@ canvas {
   margin-top: 2px;
 }
 
+.order-row {
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(0, 170, 255, 0.05);
+  }
+}
+
+.order-detail-modal {
+  width: min(560px, 94vw);
+}
+
+.order-detail-modal__subtitle {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.order-detail-modal__body {
+  max-height: 65vh;
+}
+
+.order-detail-modal__fields {
+  display: grid;
+  gap: 10px;
+}
+
+.order-detail-modal__row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.order-detail-modal__label {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.order-detail-modal__value {
+  font-size: 12px;
+  color: var(--text-primary);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
 // Wallet
 .wallet-section {
   padding: 12px 0;
@@ -254,6 +305,25 @@ canvas {
 
 .grid-row-active {
   background: rgba(0, 170, 255, 0.04);
+}
+
+.grid-validation-badge {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 2px 8px;
+  border: 1px solid rgba(0, 170, 255, 0.35);
+  border-radius: 999px;
+  color: var(--neon-blue);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: rgba(0, 170, 255, 0.1);
+}
+
+.grid-order-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .btn-outline {

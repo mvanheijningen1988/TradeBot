@@ -49,7 +49,13 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   // ── News tab ──────────────────────────────────────────────────
   feeds: NewsFeed[] = [];
-  newFeed = { name: '', url: '' };
+  newFeed = { name: '', url: '', source_type: 'rss', weight: 1 };
+  editingFeedId: number | null = null;
+  editFeedForm = { name: '', url: '', source_type: 'rss', weight: 1 };
+  feedTypeOptions: DropdownOption[] = [
+    { value: 'rss', label: 'RSS feed' },
+    { value: 'scrape', label: 'Scrape page' },
+  ];
 
   coinMappings: CoinMapping[] = [];
   newCoinMapping = { name: '', symbol: '', ambiguous: false };
@@ -61,6 +67,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
   newWordType: 'include' | 'exclude' = 'exclude';
 
   minConfidence = 0;
+  pollIntervalMinutes = 5;
+  finbertEnabled = false;
   minConfidenceSaving = false;
   signalsRefreshing = false;
 
@@ -186,10 +194,51 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   addFeed(): void {
     if (!this.newFeed.name || !this.newFeed.url) return;
-    this.newsSvc.createFeed(this.newFeed.name, this.newFeed.url).subscribe(() => {
-      this.newFeed = { name: '', url: '' };
-      this.loadFeeds();
-    });
+    this.newsSvc
+      .createFeed(
+        this.newFeed.name,
+        this.newFeed.url,
+        this.newFeed.source_type,
+        this.newFeed.weight,
+      )
+      .subscribe({
+        next: () => {
+          this.newFeed = {
+            name: '',
+            url: '',
+            source_type: 'rss',
+            weight: 1,
+          };
+          this.loadFeeds();
+        },
+        error: (err) => {
+          const detail = err?.error?.detail || 'Failed to add feed.';
+          alert(`Could not add feed: ${detail}`);
+        },
+      });
+  }
+
+  startEditFeed(feed: NewsFeed): void {
+    this.editingFeedId = feed.id;
+    this.editFeedForm = {
+      name: feed.name,
+      url: feed.url,
+      source_type: feed.source_type,
+      weight: feed.weight,
+    };
+  }
+
+  cancelEditFeed(): void {
+    this.editingFeedId = null;
+  }
+
+  saveFeedEdit(feed: NewsFeed): void {
+    this.newsSvc
+      .updateFeed(feed.id, this.editFeedForm)
+      .subscribe(() => {
+        this.editingFeedId = null;
+        this.loadFeeds();
+      });
   }
 
   toggleFeed(feed: NewsFeed): void {
@@ -278,13 +327,19 @@ export class SettingsComponent implements OnInit, OnDestroy {
   loadParams(): void {
     this.newsSvc.getParams().subscribe((p) => {
       this.minConfidence = p.min_confidence;
+      this.pollIntervalMinutes = p.poll_interval_minutes;
+      this.finbertEnabled = !!p.finbert_enabled;
     });
   }
 
   saveMinConfidence(): void {
     this.minConfidenceSaving = true;
     this.newsSvc
-      .updateParams({ min_confidence: this.minConfidence })
+      .updateParams({
+        min_confidence: this.minConfidence,
+        poll_interval_minutes: this.pollIntervalMinutes,
+        finbert_enabled: this.finbertEnabled,
+      })
       .subscribe({
         next: () => {
           this.minConfidenceSaving = false;

@@ -22,6 +22,14 @@ class TokenResponse(BaseModel):
 
     access_token: str
     token_type: str = "bearer"
+    must_change_password: bool = False
+
+
+class ChangePasswordRequest(BaseModel):
+    """Payload for changing the current user's password."""
+
+    current_password: str
+    new_password: str
 
 
 class UserResponse(BaseModel):
@@ -32,6 +40,7 @@ class UserResponse(BaseModel):
     role: str
     language: str
     time_display: str
+    must_change_password: bool
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -45,7 +54,29 @@ async def login(body: LoginRequest, request: Request):
             detail="Invalid credentials.",
         )
     token = auth.create_access_token(user["id"], user["role"])
-    return TokenResponse(access_token=token)
+    return TokenResponse(
+        access_token=token,
+        must_change_password=bool(user.get("must_change_password", 0)),
+    )
+
+
+@router.put("/password")
+async def change_password(
+    body: ChangePasswordRequest,
+    request: Request,
+    payload: Annotated[dict, Depends(get_current_user)],
+):
+    """Change the current user's password."""
+    auth = request.app.state.auth_service
+    changed = await auth.change_password(
+        int(payload["sub"]), body.current_password, body.new_password
+    )
+    if not changed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is invalid.",
+        )
+    return {"detail": "Password updated."}
 
 
 @router.get(
@@ -68,4 +99,5 @@ async def get_me(
         role=user["role"],
         language=user["language"],
         time_display=user.get("time_display", "local"),
+        must_change_password=bool(user.get("must_change_password", 0)),
     )

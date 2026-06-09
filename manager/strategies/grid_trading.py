@@ -65,6 +65,8 @@ class GridStrategy(Strategy):
         self._filled_sells: int = 0
         self._total_profit: Decimal = Decimal("0")
         self._tick_count: int = 0
+        self._quote_balance: Decimal = Decimal(str(config.budget_quote))
+        self._base_balance: Decimal = Decimal("0")
 
     @staticmethod
     def name() -> str:
@@ -111,6 +113,9 @@ class GridStrategy(Strategy):
             True if placement succeeded.
         """
         try:
+            client_order_id = self._next_client_order_id(
+                f"grid-{side.value}-p{price}"
+            )
             order = await self._exchange.create_order(
                 market=cfg.market,
                 side=side,
@@ -119,6 +124,7 @@ class GridStrategy(Strategy):
                 amount=str(amount),
                 price=str(price),
                 post_only=True,
+                client_order_id=client_order_id,
             )
             price_str = str(price)
             if side == OrderSide.BUY:
@@ -186,6 +192,10 @@ class GridStrategy(Strategy):
         investment_per_grid = budget / num
 
         self._state = StrategyState.RUNNING
+        await self._report_budget(
+            balance=str(self._quote_balance),
+            price=str(current_price),
+        )
 
         existing = len(self._buy_orders) + len(self._sell_orders)
         if existing:
@@ -279,13 +289,19 @@ class GridStrategy(Strategy):
         if self._state != StrategyState.RUNNING:
             return
 
+        current_price = Decimal(price)
+        equity = self._quote_balance + (self._base_balance * current_price)
+        await self._report_budget(
+            balance=str(equity),
+            price=str(current_price),
+        )
+
         # Reconcile tracked orders with the exchange every tick so
         # filled/cancelled levels are replenished quickly.
         self._tick_count += 1
         await self._reconcile_orders()
 
         cfg = self._config
-        current_price = Decimal(price)
         budget = Decimal(str(cfg.budget_quote))
         investment_per_grid = budget / cfg.num_grids
 
@@ -547,6 +563,16 @@ class GridStrategy(Strategy):
             fallback_quote=investment_per_grid,
             sell_price=sell_price,
         )
+        quote_spent = self._buy_quote_spent_from_fill(
+            filled_order=filled_order,
+            fallback_quote=investment_per_grid,
+        )
+        self._quote_balance = max(
+            Decimal("0"),
+            self._quote_balance - quote_spent,
+        )
+        self._base_balance += amount
+
         grid_profit = (sell_price - filled_price) * amount
         self._total_profit += grid_profit
         if amount <= 0:
@@ -577,9 +603,24 @@ class GridStrategy(Strategy):
             return
 
         buy_price = self._grid_prices[idx - 1]
-        amount = self._buy_amount_from_fill(
+        quote_received = self._sell_quote_received_from_fill(
             filled_order=filled_order,
             fallback_quote=investment_per_grid,
+        )
+        base_sold = self._sell_base_sold_from_fill(
+            filled_order=filled_order,
+            fallback_quote=quote_received,
+            fill_price=filled_price,
+        )
+        self._quote_balance += quote_received
+        self._base_balance = max(
+            Decimal("0"),
+            self._base_balance - base_sold,
+        )
+
+        amount = self._buy_amount_from_fill(
+            filled_order=filled_order,
+            fallback_quote=quote_received,
             buy_price=buy_price,
         )
         if amount <= 0:
@@ -612,6 +653,66 @@ class GridStrategy(Strategy):
 
         return (fallback_quote / sell_price).quantize(
             Decimal("0.00000001"), rounding=ROUND_DOWN,
+        )
+
+    def _buy_quote_spent_from_fill(
+        self,
+        filled_order: Optional[Order],
+        fallback_quote: Decimal,
+    ) -> Decimal:
+        """Return quote spent for a BUY fill including quote-currency fees."""
+        quote_spent = fallback_quote
+        if filled_order and filled_order.filled_amount_quote:
+            quote_spent = Decimal(filled_order.filled_amount_quote)
+            if (
+                filled_order.fee_currency
+                and filled_order.market
+                and filled_order.fee_currency
+                == filled_order.market.split("-")[1]
+            ):
+                quote_spent += Decimal(filled_order.fee_paid or "0")
+        return max(quote_spent, Decimal("0"))
+
+    def _sell_quote_received_from_fill(
+        self,
+        filled_order: Optional[Order],
+        fallback_quote: Decimal,
+    ) -> Decimal:
+        """Return quote received for a SELL fill net of quote fees."""
+        quote_received = fallback_quote
+        if filled_order and filled_order.filled_amount_quote:
+            quote_received = Decimal(filled_order.filled_amount_quote)
+            if (
+                filled_order.fee_currency
+                and filled_order.market
+                and filled_order.fee_currency
+                == filled_order.market.split("-")[1]
+            ):
+                quote_received -= Decimal(filled_order.fee_paid or "0")
+        return max(quote_received, Decimal("0"))
+
+    def _sell_base_sold_from_fill(
+        self,
+        filled_order: Optional[Order],
+        fallback_quote: Decimal,
+        fill_price: Decimal,
+    ) -> Decimal:
+        """Return base sold for a SELL fill including base-currency fees."""
+        if fill_price <= 0:
+            return Decimal("0")
+
+        base_sold = fallback_quote / fill_price
+        if filled_order and filled_order.filled_amount:
+            base_sold = Decimal(filled_order.filled_amount)
+            if (
+                filled_order.fee_currency
+                and filled_order.market
+                and filled_order.fee_currency
+                == filled_order.market.split("-")[0]
+            ):
+                base_sold += Decimal(filled_order.fee_paid or "0")
+        return max(base_sold, Decimal("0")).quantize(
+            Decimal("0.00000001"), rounding=ROUND_DOWN
         )
 
     def _buy_amount_from_fill(

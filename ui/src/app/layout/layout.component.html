@@ -22,6 +22,10 @@
           <span class="nav-badge">{{ pendingWorkers }}</span>
         }
       </a>
+      <a routerLink="/news" routerLinkActive="active" class="nav-item" title="News">
+        <i class="nav-icon fa-solid fa-newspaper"></i>
+        <span class="nav-label">News</span>
+      </a>
       <a routerLink="/settings" routerLinkActive="active" class="nav-item" title="Settings">
         <i class="nav-icon fa-solid fa-gear"></i>
         <span class="nav-label">Settings</span>
@@ -73,7 +77,14 @@
         @if (investSignals.length > 0) {
           <div class="signal-list">
             @for (sig of investSignals; track sig.coin) {
-              <div class="signal-row signal-row--clickable" (click)="navigateToCreateBot(sig.coin)">
+              <button
+                type="button"
+                class="signal-row signal-row--clickable"
+                (click)="navigateToCreateBot(sig.coin)"
+                (keydown.enter)="navigateToCreateBot(sig.coin)"
+                (keydown.space)="$event.preventDefault(); navigateToCreateBot(sig.coin)"
+                tabindex="0"
+              >
                 <div
                   class="signal-coin mono signal-coin--hoverable"
                   (mouseenter)="showTooltip($event, sig, true)"
@@ -89,7 +100,7 @@
                     <span class="reason-tag reason-tag--buy">{{ r }}</span>
                   }
                 </div>
-              </div>
+              </button>
             }
           </div>
         } @else {
@@ -105,7 +116,14 @@
         @if (removeSignals.length > 0) {
           <div class="signal-list">
             @for (sig of removeSignals; track sig.coin) {
-              <div class="signal-row signal-row--clickable" (click)="navigateToCreateBot(sig.coin)">
+              <button
+                type="button"
+                class="signal-row signal-row--clickable"
+                (click)="navigateToCreateBot(sig.coin)"
+                (keydown.enter)="navigateToCreateBot(sig.coin)"
+                (keydown.space)="$event.preventDefault(); navigateToCreateBot(sig.coin)"
+                tabindex="0"
+              >
                 <div
                   class="signal-coin mono signal-coin--hoverable"
                   (mouseenter)="showTooltip($event, sig, false)"
@@ -121,7 +139,7 @@
                     <span class="reason-tag reason-tag--sell">{{ r }}</span>
                   }
                 </div>
-              </div>
+              </button>
             }
           </div>
         } @else {

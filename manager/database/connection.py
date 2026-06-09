@@ -20,6 +20,7 @@ class Database:
     def __init__(self, db_path: str) -> None:
         self._db_path = db_path
         self._db: Optional[aiosqlite.Connection] = None
+        self.legacy_admin_password_reset_required = False
 
     async def connect(self) -> None:
         """Open the database and ensure schema exists."""
@@ -53,6 +54,21 @@ class Database:
             "time_display",
             "TEXT NOT NULL DEFAULT 'local'",
         )
+        await self._ensure_column(
+            "users",
+            "must_change_password",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        await self._ensure_column(
+            "news_feeds",
+            "source_type",
+            "TEXT NOT NULL DEFAULT 'rss'",
+        )
+        await self._ensure_column(
+            "news_feeds",
+            "weight",
+            "REAL NOT NULL DEFAULT 1.0",
+        )
 
     async def _ensure_column(
         self,
@@ -71,6 +87,8 @@ class Database:
         )
         await self._db.commit()
         logger.info("Migration applied: added %s.%s", table, column)
+        if table == "users" and column == "must_change_password":
+            self.legacy_admin_password_reset_required = True
 
     async def execute(
         self, sql: str, params: tuple = ()

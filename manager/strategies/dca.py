@@ -73,6 +73,8 @@ class DCAStrategy(Strategy):
         self._orders_placed: int = 0
         self._total_spent: Decimal = Decimal("0")
         self._total_acquired: Decimal = Decimal("0")
+        self._quote_balance: Decimal = Decimal(str(config.budget_quote))
+        self._base_balance: Decimal = Decimal("0")
         self._last_buy_time: float = 0.0
 
     @staticmethod
@@ -110,6 +112,10 @@ class DCAStrategy(Strategy):
             )
 
         self._state = StrategyState.RUNNING
+        await self._report_budget(
+            balance=str(self._quote_balance),
+            price="0",
+        )
         self._task = asyncio.create_task(self._run_loop())
         logger.info(
             "DCA strategy started: market=%s amount=%s interval=%s",
@@ -168,15 +174,38 @@ class DCAStrategy(Strategy):
         amount_quote = str(cfg.amount_per_order)
 
         try:
+            client_order_id = self._next_client_order_id(
+                f"buy:{self._orders_placed + 1}"
+            )
             order = await self._exchange.create_order(
                 market=cfg.market,
                 side=OrderSide.BUY,
                 order_type=OrderType.MARKET,
                 operator_id=cfg.operator_id,
                 amount_quote=amount_quote,
+                client_order_id=client_order_id,
             )
             self._orders_placed += 1
             self._total_spent += Decimal(amount_quote)
+            quote_spent = Decimal(order.filled_amount_quote or amount_quote)
+            base_received = Decimal(order.filled_amount or "0")
+
+            fee_paid = Decimal(order.fee_paid or "0")
+            fee_currency = (order.fee_currency or "").upper()
+            quote_symbol = cfg.market.split("-")[1].upper()
+            base_symbol = cfg.market.split("-")[0].upper()
+
+            if fee_paid > 0 and fee_currency == quote_symbol:
+                quote_spent += fee_paid
+            if fee_paid > 0 and fee_currency == base_symbol:
+                base_received = max(Decimal("0"), base_received - fee_paid)
+
+            self._quote_balance = max(
+                Decimal("0"),
+                self._quote_balance - quote_spent,
+            )
+            self._base_balance += base_received
+
             if order.filled_amount:
                 self._total_acquired += Decimal(order.filled_amount)
             self._last_buy_time = time.time()
@@ -193,7 +222,15 @@ class DCAStrategy(Strategy):
             logger.exception("DCA buy order failed.")
 
     async def on_tick(self, price: str) -> None:
-        """No-op — DCA buys on a schedule, not on price changes."""
+        """Report mark-to-market budget value for trend graphs."""
+        if self._state != StrategyState.RUNNING:
+            return
+        current_price = Decimal(price)
+        equity = self._quote_balance + (self._base_balance * current_price)
+        await self._report_budget(
+            balance=str(equity),
+            price=str(current_price),
+        )
 
     async def on_order_filled(self, order_id: str) -> None:
         """No-op — DCA uses market orders which fill immediately."""

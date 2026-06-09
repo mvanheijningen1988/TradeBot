@@ -11,6 +11,7 @@ import httpx
 import websockets
 
 from manager.constants import (
+    WS_TYPE_BUDGET_SNAPSHOT,
     WS_TYPE_BOT_LOG,
     WS_TYPE_BOT_STATUS,
     WS_TYPE_ERROR,
@@ -33,6 +34,15 @@ class ManagerClient:
         address: str,
         version: str,
     ) -> None:
+        """Initialize manager API and websocket client state.
+
+        Args:
+            manager_url: Base HTTP url for manager REST endpoints.
+            manager_ws_url: WebSocket endpoint base url for worker channel.
+            agent_id: Worker agent identity.
+            address: Worker network address metadata.
+            version: Worker runtime version string.
+        """
         self._manager_url = manager_url.rstrip("/")
         self._manager_ws_url = manager_ws_url
         self._agent_id = agent_id
@@ -44,8 +54,11 @@ class ManagerClient:
     async def register(self) -> bool:
         """Register this worker with the Manager via REST.
 
-        Retries with exponential backoff on network errors.
-        Stops immediately on explicit rejection (403).
+        Retries with exponential backoff on network errors and stops
+        immediately on explicit rejection (HTTP 403).
+
+        Returns:
+            ``True`` when worker registration succeeds; otherwise ``False``.
         """
         import asyncio
 
@@ -88,24 +101,32 @@ class ManagerClient:
         return False
 
     async def connect_ws(self) -> bool:
-        """Establish the WebSocket connection to the Manager."""
+        """Establish worker websocket connection to manager.
+
+        Returns:
+            ``True`` when the socket is connected; otherwise ``False``.
+        """
         try:
             url = f"{self._manager_ws_url}?agent_id={self._agent_id}"
             self._ws = await websockets.connect(url)
             logger.info("WebSocket connected to manager.")
             return True
-        except Exception as exc:
-            logger.error("WebSocket connection failed: %s", exc)
+        except Exception:
+            logger.exception("WebSocket connection failed.")
             return False
 
     async def disconnect(self) -> None:
-        """Close the WebSocket connection."""
+        """Close active websocket connection if connected."""
         if self._ws:
             await self._ws.close()
             self._ws = None
 
     async def receive(self) -> Optional[dict]:
-        """Receive and parse a JSON message from the Manager."""
+        """Receive and parse one manager websocket payload.
+
+        Returns:
+            Parsed payload dictionary, or ``None`` when disconnected/error.
+        """
         if not self._ws:
             return None
         try:
@@ -119,13 +140,18 @@ class ManagerClient:
             return None
 
     async def send_heartbeat(self) -> None:
-        """Send a heartbeat to the Manager."""
+        """Send worker heartbeat message to manager."""
         await self._send({"type": WS_TYPE_HEARTBEAT})
 
     async def send_bot_status(
         self, bot_id: int, status: str
     ) -> None:
-        """Report bot status change."""
+        """Report bot status transition to manager.
+
+        Args:
+            bot_id: Bot identifier.
+            status: New bot status.
+        """
         await self._send(
             {"type": WS_TYPE_BOT_STATUS, "bot_id": bot_id, "status": status}
         )
@@ -137,7 +163,14 @@ class ManagerClient:
         level: str = "INFO",
         correlation_id: Optional[str] = None,
     ) -> None:
-        """Send a bot log entry to the Manager."""
+        """Send bot-scoped diagnostic log message.
+
+        Args:
+            bot_id: Bot identifier.
+            message: Log message text.
+            level: Log level string.
+            correlation_id: Optional trace correlation id.
+        """
         await self._send(
             {
                 "type": WS_TYPE_BOT_LOG,
@@ -151,7 +184,12 @@ class ManagerClient:
     async def send_error(
         self, bot_id: int, message: str
     ) -> None:
-        """Report an error for a bot."""
+        """Report a bot error event to manager.
+
+        Args:
+            bot_id: Bot identifier.
+            message: Error message.
+        """
         await self._send(
             {"type": WS_TYPE_ERROR, "bot_id": bot_id, "message": message}
         )
@@ -159,7 +197,12 @@ class ManagerClient:
     async def send_order_update(
         self, bot_id: int, order_data: dict
     ) -> None:
-        """Report an order event (placed/filled/cancelled) to the Manager."""
+        """Report an order event payload to manager.
+
+        Args:
+            bot_id: Bot identifier.
+            order_data: Order event fields to merge into websocket payload.
+        """
         await self._send(
             {
                 "type": WS_TYPE_ORDER_UPDATE,
@@ -175,7 +218,14 @@ class ManagerClient:
         subcategory: str = "",
         correlation_id: Optional[str] = None,
     ) -> None:
-        """Send a worker-level log entry to the Manager."""
+        """Send worker-scoped diagnostic log message.
+
+        Args:
+            message: Log message text.
+            level: Log level string.
+            subcategory: Logger/category subgroup.
+            correlation_id: Optional trace correlation id.
+        """
         await self._send(
             {
                 "type": WS_TYPE_WORKER_LOG,
@@ -186,8 +236,34 @@ class ManagerClient:
             }
         )
 
+    async def send_budget_snapshot(
+        self,
+        bot_id: int,
+        balance: str,
+        price: str,
+    ) -> None:
+        """Send a bot budget snapshot to manager.
+
+        Args:
+            bot_id: Bot identifier.
+            balance: Bot mark-to-market value in quote currency.
+            price: Market price used to value current holdings.
+        """
+        await self._send(
+            {
+                "type": WS_TYPE_BUDGET_SNAPSHOT,
+                "bot_id": bot_id,
+                "balance": balance,
+                "price": price,
+            }
+        )
+
     async def _send(self, data: dict) -> None:
-        """Send a JSON message to the Manager."""
+        """Send one JSON websocket payload to manager.
+
+        Args:
+            data: Payload dictionary.
+        """
         if not self._ws:
             logger.warning("Cannot send: not connected.")
             return

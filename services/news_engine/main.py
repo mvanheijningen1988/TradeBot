@@ -27,11 +27,15 @@ from services.news_engine.ml.sentiment_model import SentimentModel
 from services.news_engine.processing.article_parser import ArticleParser
 from services.news_engine.processing.coin_extractor import CoinExtractor
 from services.news_engine.signals.signal_engine import SignalEngine
+from services.news_engine.signals.signal_models import NewsArticle
 from services.news_engine.signals.signal_store import SignalStore
 
 logger = logging.getLogger(__name__)
 
 _POLL_INTERVAL = 300  # 5 minutes
+_DEFAULT_POLL_INTERVAL_MINUTES = 5
+_PARAM_POLL_INTERVAL_MINUTES = "poll_interval_minutes"
+_PARAM_FINBERT_ENABLED = "finbert_enabled"
 
 
 class NewsEngineService:
@@ -55,6 +59,7 @@ class NewsEngineService:
         self._cycle_lock = asyncio.Lock()
         self._active_cycles = 0
         self._running = False
+        self._poll_interval_seconds = _POLL_INTERVAL
 
     @property
     def store(self) -> SignalStore:
@@ -107,7 +112,7 @@ class NewsEngineService:
                 await self._run_cycle_once()
             except Exception:
                 logger.exception("Processing cycle failed")
-            await asyncio.sleep(_POLL_INTERVAL)
+            await asyncio.sleep(self._poll_interval_seconds)
 
     async def _run_cycle_once(self) -> None:
         """Run one cycle with a lock and processing state tracking."""
@@ -139,7 +144,12 @@ class NewsEngineService:
         # Feeds → collector sources.
         feeds = await self._settings_repo.list_feeds()
         sources = [
-            NewsSource(name=f["name"], url=f["url"])
+            NewsSource(
+                name=f["name"],
+                url=f["url"],
+                source_type=f.get("source_type", "rss"),
+                weight=float(f.get("weight", 1.0) or 1.0),
+            )
             for f in feeds
             if f["enabled"]
         ]
@@ -172,9 +182,31 @@ class NewsEngineService:
             self._min_confidence = float(raw)
         except ValueError:
             self._min_confidence = 0.0
+        poll_raw = await self._settings_repo.get_param(
+            _PARAM_POLL_INTERVAL_MINUTES,
+            str(_DEFAULT_POLL_INTERVAL_MINUTES),
+        )
+        try:
+            poll_minutes = max(float(poll_raw), 0.5)
+        except ValueError:
+            poll_minutes = _DEFAULT_POLL_INTERVAL_MINUTES
+        self._poll_interval_seconds = int(poll_minutes * 60)
+        finbert_default = "1" if self._sentiment.has_finbert else "0"
+        finbert_raw = await self._settings_repo.get_param(
+            _PARAM_FINBERT_ENABLED,
+            finbert_default,
+        )
+        finbert_enabled = str(finbert_raw).strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        active_finbert = self._sentiment.set_finbert_enabled(finbert_enabled)
         logger.debug(
             "min_confidence threshold: %.2f", self._min_confidence
         )
+        logger.debug("finbert enabled: %s", active_finbert)
 
     async def _process_cycle(self) -> None:
         """Execute one complete processing cycle."""
@@ -235,6 +267,22 @@ class NewsEngineService:
                 "Sentiment analysis failed for: %s", article.url
             )
             return []
+
+        await self._store.save_article(
+            NewsArticle(
+                title=parsed.title,
+                url=parsed.url,
+                source=parsed.source,
+                source_type=parsed.source_type,
+                source_weight=parsed.source_weight,
+                timestamp=parsed.timestamp,
+                summary=article.summary or parsed.text[:320],
+                content=parsed.text,
+                sentiment_label=sentiment.label,
+                sentiment_score=sentiment.score,
+                coins=[],
+            )
+        )
 
         # Step 5: Event detection.
         events = self._event_classifier.detect(parsed.text)

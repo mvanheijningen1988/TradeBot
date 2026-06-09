@@ -2,10 +2,105 @@
 
 import pytest
 
+from manager.exchanges.base import ExchangeClient
+from manager.strategies.base import Strategy, StrategyConfig
 from manager.strategies.dca import DCAStrategy
 from manager.strategies.grid_trading import GridStrategy
 from manager.strategies.martingale import MartingaleStrategy
 from manager.strategies.registry import StrategyRegistry
+
+
+class DummyExchange(ExchangeClient):
+    """Minimal exchange stub for base-strategy unit tests."""
+
+    async def connect(self) -> None:
+        return None
+
+    async def disconnect(self) -> None:
+        return None
+
+    async def authenticate(self) -> None:
+        return None
+
+    async def get_markets(self, market=None):
+        return []
+
+    async def get_order_book(self, market: str, depth=None):
+        raise NotImplementedError()
+
+    async def get_trades(
+        self, market: str, limit: int = 500, start=None, end=None
+    ):
+        return []
+
+    async def get_ticker_price(self, market: str):
+        raise NotImplementedError()
+
+    async def create_order(self, *args, **kwargs):
+        raise NotImplementedError()
+
+    async def update_order(self, *args, **kwargs):
+        raise NotImplementedError()
+
+    async def get_order(self, *args, **kwargs):
+        raise NotImplementedError()
+
+    async def get_open_orders(self, market=None):
+        return []
+
+    async def get_orders(
+        self, market: str, limit: int = 500, start=None, end=None
+    ):
+        return []
+
+    async def cancel_order(self, *args, **kwargs):
+        raise NotImplementedError()
+
+    async def cancel_orders(self, market: str, operator_id: int):
+        return []
+
+    async def get_account_fees(self):
+        raise NotImplementedError()
+
+    async def get_balance(self, symbol=None):
+        return []
+
+    async def subscribe_ticker(self, markets: list[str], callback) -> None:
+        return None
+
+    async def unsubscribe_ticker(self, markets: list[str]) -> None:
+        return None
+
+
+class DummyStrategy(Strategy):
+    """Concrete strategy for validating base helper behavior."""
+
+    @staticmethod
+    def name() -> str:
+        return "dummy"
+
+    @staticmethod
+    def description() -> str:
+        return "dummy"
+
+    @staticmethod
+    def default_parameters() -> dict[str, str]:
+        return {}
+
+    async def start(self) -> None:
+        return None
+
+    async def stop(self) -> None:
+        return None
+
+    async def on_tick(self, price: str) -> None:
+        return None
+
+    async def on_order_filled(self, order_id: str) -> None:
+        return None
+
+    def get_status(self) -> dict[str, str]:
+        return {}
 
 
 class TestStrategyRegistry:
@@ -49,6 +144,25 @@ class TestStrategyRegistry:
 
 class TestGridStrategy:
     """Grid strategy unit tests."""
+
+    def test_client_order_id_is_uuid(self):
+        """Generate Bitvavo-safe client order ids as canonical UUIDs."""
+        strategy = DummyStrategy(
+            StrategyConfig(
+                market="BTC-EUR",
+                operator_id=1,
+                budget_quote=100.0,
+                reference_id="bot-1",
+            ),
+            DummyExchange(),
+        )
+
+        client_order_id = strategy._next_client_order_id(
+            "grid-buy-p0.96"
+        )
+
+        assert len(client_order_id) == 36
+        assert client_order_id.count("-") == 4
 
     def test_name(self):
         """Return canonical registry name for grid strategy."""

@@ -27,6 +27,8 @@ export interface Balance {
   symbol: string;
   available: string;
   in_order: string;
+  manager_allocated: string;
+  manager_in_order: string;
 }
 
 export interface BudgetAvailable {
@@ -38,8 +40,8 @@ export interface BudgetAvailable {
 
 @Injectable({ providedIn: 'root' })
 export class ExchangeService {
-  private http = inject(HttpClient);
-  private url = `${environment.apiUrl}/exchanges`;
+  private readonly http = inject(HttpClient);
+  private readonly url = `${environment.apiUrl}/exchanges`;
 
   list(): Observable<Exchange[]> {
     return this.http.get<Exchange[]>(this.url);

@@ -12,6 +12,7 @@ import hmac
 import json
 import logging
 import time
+from decimal import Decimal, InvalidOperation, ROUND_DOWN
 from typing import Any, Callable, Optional
 
 import websockets
@@ -39,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 WS_ENDPOINT = "wss://ws.bitvavo.com/v2/"
 DEFAULT_ACCESS_WINDOW = 10_000  # ms
+_DEFAULT_MAX_DECIMALS = 8
 
 
 class BitvavoClient(ExchangeClient):
@@ -67,6 +69,7 @@ class BitvavoClient(ExchangeClient):
         # Subscription callbacks: channel -> {market -> callback}
         self._subscriptions: dict[str, dict[str, Callable]] = {}
         self._background_tasks: set[asyncio.Task] = set()
+        self._market_quantity_decimals: dict[str, int] = {}
 
         self._recv_task: Optional[asyncio.Task] = None
         self._reconnect_lock = asyncio.Lock()
@@ -149,6 +152,68 @@ class BitvavoClient(ExchangeClient):
     def _next_request_id(self) -> int:
         self._request_id += 1
         return self._request_id
+
+    @staticmethod
+    def _format_decimal_floor(value: str, decimals: int = 8) -> str:
+        """Floor numeric text to a fixed decimal precision.
+
+        Args:
+            value: Numeric value as text.
+            decimals: Maximum fractional digits to preserve.
+
+        Returns:
+            Decimal string without scientific notation.
+
+        Raises:
+            ValueError: If ``value`` cannot be parsed as decimal.
+        """
+        try:
+            as_decimal = Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid numeric value: {value}") from exc
+
+        if decimals < 0:
+            decimals = 0
+        quantizer = Decimal("1") if decimals == 0 else Decimal(
+            f"1e-{decimals}"
+        )
+        floored = as_decimal.quantize(quantizer, rounding=ROUND_DOWN)
+        normalized = format(floored, "f")
+        if "." not in normalized:
+            return normalized
+        return normalized.rstrip("0").rstrip(".") or "0"
+
+    async def _get_amount_decimals(self, market: str) -> int:
+        """Resolve amount precision for a market with safe caching.
+
+        The result is clamped to ``0..8`` to satisfy current precision
+        safeguards used for amount-like fields.
+
+        Args:
+            market: Market symbol (for example ``BTC-EUR``).
+
+        Returns:
+            Max decimal digits to use for amount formatting.
+        """
+        cached = self._market_quantity_decimals.get(market)
+        if cached is not None:
+            return cached
+
+        decimals = _DEFAULT_MAX_DECIMALS
+        try:
+            markets = await self.get_markets(market=market)
+            if markets:
+                market_decimals = int(markets[0].quantity_decimals)
+                decimals = min(_DEFAULT_MAX_DECIMALS, max(0, market_decimals))
+        except Exception:
+            logger.warning(
+                "Failed to fetch quantity decimals for %s; using %d.",
+                market,
+                _DEFAULT_MAX_DECIMALS,
+            )
+
+        self._market_quantity_decimals[market] = decimals
+        return decimals
 
     async def _send_action(
         self,
@@ -427,19 +492,43 @@ class BitvavoClient(ExchangeClient):
         trigger_type: Optional[str] = None,
         trigger_reference: Optional[str] = None,
     ) -> Order:
-        """Create an order on Bitvavo and return the parsed response."""
+        """Create an order on Bitvavo and return parsed order details.
+
+        Args:
+            market: Market symbol (for example ``BTC-EUR``).
+            side: Order side enum.
+            order_type: Order type enum.
+            operator_id: Bot/operator scoping id for exchange filtering.
+            amount: Base-asset amount (floored by market precision, max 8).
+            amount_quote: Quote-asset amount for quote-sized orders.
+            price: Limit/trigger reference price.
+            time_in_force: TIF policy for limit-style orders.
+            post_only: Whether order should be maker-only.
+            client_order_id: Optional caller-supplied id.
+            trigger_amount: Trigger threshold for stop orders.
+            trigger_type: Trigger condition type.
+            trigger_reference: Trigger reference source.
+
+        Returns:
+            Parsed exchange order payload.
+        """
         body: dict[str, Any] = {
             "market": market,
             "side": side.value,
             "orderType": order_type.value,
             "operatorId": operator_id,
         }
+        amount_decimals = await self._get_amount_decimals(market)
         if amount is not None:
-            body["amount"] = amount
+            body["amount"] = self._format_decimal_floor(
+                amount, decimals=amount_decimals
+            )
         if amount_quote is not None:
-            body["amountQuote"] = amount_quote
+            body["amountQuote"] = self._format_decimal_floor(
+                amount_quote
+            )
         if price is not None:
-            body["price"] = price
+            body["price"] = self._format_decimal_floor(price)
         if time_in_force != TimeInForce.GTC:
             body["timeInForce"] = time_in_force.value
         if post_only:
@@ -447,7 +536,9 @@ class BitvavoClient(ExchangeClient):
         if client_order_id:
             body["clientOrderId"] = client_order_id
         if trigger_amount is not None:
-            body["triggerAmount"] = trigger_amount
+            body["triggerAmount"] = self._format_decimal_floor(
+                trigger_amount
+            )
         if trigger_type is not None:
             body["triggerType"] = trigger_type
         if trigger_reference is not None:
@@ -469,20 +560,44 @@ class BitvavoClient(ExchangeClient):
         post_only: Optional[bool] = None,
         client_order_id: Optional[str] = None,
     ) -> Order:
-        """Update an existing Bitvavo order and return updated details."""
+        """Update an existing order and return the updated payload.
+
+        Args:
+            market: Market symbol.
+            order_id: Exchange order id.
+            operator_id: Bot/operator scoping id for exchange filtering.
+            amount: Updated base amount (floored by market precision, max 8).
+            amount_remaining: Updated remaining amount with same precision.
+            price: Updated limit price.
+            trigger_amount: Updated trigger threshold.
+            time_in_force: Optional updated TIF.
+            post_only: Optional updated post-only setting.
+            client_order_id: Optional updated client id.
+
+        Returns:
+            Parsed updated order payload.
+        """
         body: dict[str, Any] = {
             "market": market,
             "orderId": order_id,
             "operatorId": operator_id,
         }
+        amount_decimals = await self._get_amount_decimals(market)
         if amount is not None:
-            body["amount"] = amount
+            body["amount"] = self._format_decimal_floor(
+                amount, decimals=amount_decimals
+            )
         if amount_remaining is not None:
-            body["amountRemaining"] = amount_remaining
+            body["amountRemaining"] = self._format_decimal_floor(
+                amount_remaining,
+                decimals=amount_decimals,
+            )
         if price is not None:
-            body["price"] = price
+            body["price"] = self._format_decimal_floor(price)
         if trigger_amount is not None:
-            body["triggerAmount"] = trigger_amount
+            body["triggerAmount"] = self._format_decimal_floor(
+                trigger_amount
+            )
         if time_in_force is not None:
             body["timeInForce"] = time_in_force.value
         if post_only is not None:
@@ -499,7 +614,16 @@ class BitvavoClient(ExchangeClient):
         order_id: str,
         client_order_id: Optional[str] = None,
     ) -> Order:
-        """Fetch one order by exchange order id or client order id."""
+        """Fetch one order by exchange id or client id.
+
+        Args:
+            market: Market symbol.
+            order_id: Exchange order id.
+            client_order_id: Optional client order id.
+
+        Returns:
+            Parsed order payload.
+        """
         body: dict[str, Any] = {"market": market, "orderId": order_id}
         if client_order_id:
             body["clientOrderId"] = client_order_id
@@ -509,7 +633,14 @@ class BitvavoClient(ExchangeClient):
     async def get_open_orders(
         self, market: Optional[str] = None
     ) -> list[Order]:
-        """Return all currently open orders, optionally for one market."""
+        """List open orders, optionally scoped to one market.
+
+        Args:
+            market: Optional market symbol filter.
+
+        Returns:
+            List of parsed open orders.
+        """
         body: dict[str, Any] = {}
         if market:
             body["market"] = market
@@ -547,7 +678,17 @@ class BitvavoClient(ExchangeClient):
         operator_id: int,
         client_order_id: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Cancel a single order and return the exchange response payload."""
+        """Cancel one open order.
+
+        Args:
+            market: Market symbol.
+            order_id: Exchange order id.
+            operator_id: Bot/operator scoping id.
+            client_order_id: Optional client order id.
+
+        Returns:
+            Raw exchange cancellation response payload.
+        """
         body: dict[str, Any] = {
             "market": market,
             "orderId": order_id,
@@ -561,7 +702,15 @@ class BitvavoClient(ExchangeClient):
     async def cancel_orders(
         self, market: str, operator_id: int
     ) -> list[dict[str, Any]]:
-        """Cancel all orders for a market and return cancellation results."""
+        """Cancel all open orders for a market.
+
+        Args:
+            market: Market symbol.
+            operator_id: Bot/operator scoping id.
+
+        Returns:
+            List of raw cancellation response rows.
+        """
         body: dict[str, Any] = {
             "market": market,
             "operatorId": operator_id,

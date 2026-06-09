@@ -8,28 +8,38 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class NewsSource:
-    """A single RSS news source."""
+    """A single configured news source."""
 
     name: str
     url: str
+    source_type: str = "rss"
+    weight: float = 1.0
 
 
 DEFAULT_SOURCES: list[NewsSource] = [
     NewsSource(
         name="CoinDesk",
         url="https://www.coindesk.com/arc/outboundfeeds/rss/",
+        source_type="rss",
+        weight=1.0,
     ),
     NewsSource(
         name="CoinTelegraph",
         url="https://cointelegraph.com/rss",
+        source_type="rss",
+        weight=1.0,
     ),
     NewsSource(
         name="Decrypt",
         url="https://decrypt.co/feed",
+        source_type="rss",
+        weight=1.0,
     ),
     NewsSource(
         name="BeInCrypto",
         url="https://beincrypto.com/feed/",
+        source_type="rss",
+        weight=1.0,
     ),
 ]
 

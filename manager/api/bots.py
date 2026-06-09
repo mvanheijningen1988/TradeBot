@@ -154,6 +154,16 @@ async def get_bot_open_orders(
     return await request.app.state.bot_service.get_open_orders(bot_id)
 
 
+@router.get("/{bot_id}/grid-levels")
+async def get_bot_grid_levels(
+    bot_id: int,
+    request: Request,
+    _user: Annotated[dict, Depends(get_current_user)],
+):
+    """Return grid levels with active bot-owned orders only."""
+    return await request.app.state.bot_service.get_grid_levels(bot_id)
+
+
 @router.get("/{bot_id}/trades")
 async def get_bot_trades(
     bot_id: int,
@@ -170,9 +180,13 @@ async def get_overall_budget_history(
     request: Request,
     _user: Annotated[dict, Depends(get_current_user)],
     limit: int = 500,
+    since_minutes: Optional[int] = None,
 ):
     """Return budget trend data aggregated across all bots."""
-    return await request.app.state.budget_service.get_all_history(limit)
+    return await request.app.state.budget_service.get_all_history(
+        limit,
+        since_minutes,
+    )
 
 
 @router.get("/{bot_id}/budget-history")
@@ -181,6 +195,11 @@ async def get_budget_history(
     request: Request,
     _user: Annotated[dict, Depends(get_current_user)],
     limit: int = 500,
+    since_minutes: Optional[int] = None,
 ):
     """Return budget trend data for a bot."""
-    return await request.app.state.budget_service.get_history(bot_id, limit)
+    return await request.app.state.budget_service.get_history(
+        bot_id,
+        limit,
+        since_minutes,
+    )

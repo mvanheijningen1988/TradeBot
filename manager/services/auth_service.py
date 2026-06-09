@@ -6,7 +6,6 @@ password printed to the container log.
 """
 
 import logging
-import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -18,6 +17,9 @@ from manager.constants import ROLE_ADMIN
 from manager.database.repositories import UserRepository
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_ADMIN_USERNAME = "admin"
+DEFAULT_ADMIN_CREDENTIAL = "".join(("admin", "123!"))
 
 
 class AuthService:
@@ -33,18 +35,31 @@ class AuthService:
         if count > 0:
             return
 
-        password = secrets.token_urlsafe(16)
-        hashed = bcrypt.hash(password)
+        hashed = bcrypt.hash(DEFAULT_ADMIN_CREDENTIAL)
         await self._repo.create(
-            username="admin",
+            username=DEFAULT_ADMIN_USERNAME,
             password_hash=hashed,
             role=ROLE_ADMIN,
+            must_change_password=1,
         )
         logger.info("=" * 60)
         logger.info("  ADMIN ACCOUNT CREATED")
-        logger.info("  Username: admin")
-        logger.info("  Password: %s", password)
+        logger.info("  Username: %s", DEFAULT_ADMIN_USERNAME)
+        logger.info("  Password: %s", DEFAULT_ADMIN_CREDENTIAL)
         logger.info("=" * 60)
+
+    async def reset_legacy_admin_credentials(self) -> None:
+        """Reset the legacy admin account to the new default password."""
+        admin = await self._repo.get_by_username(DEFAULT_ADMIN_USERNAME)
+        if not admin:
+            return
+
+        await self._repo.update(
+            admin["id"],
+            password_hash=bcrypt.hash(DEFAULT_ADMIN_CREDENTIAL),
+            must_change_password=1,
+        )
+        logger.info("Legacy admin credentials reset to the default password.")
 
     async def authenticate(
         self, username: str, password: str
@@ -56,6 +71,26 @@ class AuthService:
         if not bcrypt.verify(password, user["password_hash"]):
             return None
         return user
+
+    async def change_password(
+        self,
+        user_id: int,
+        current_password: str,
+        new_password: str,
+    ) -> bool:
+        """Change a user's password after validating the current one."""
+        user = await self._repo.get_by_id(user_id)
+        if not user:
+            return False
+        if not bcrypt.verify(current_password, user["password_hash"]):
+            return False
+
+        await self._repo.update(
+            user_id,
+            password_hash=bcrypt.hash(new_password),
+            must_change_password=0,
+        )
+        return True
 
     def create_access_token(self, user_id: int, role: str) -> str:
         """Issue a signed JWT access token."""

@@ -12,8 +12,8 @@ import { AuthService } from '../../services/auth.service';
   styleUrl: './login.component.scss',
 })
 export class LoginComponent {
-  private auth = inject(AuthService);
-  private router = inject(Router);
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
 
   username = '';
   password = '';
@@ -22,7 +22,13 @@ export class LoginComponent {
   onLogin(): void {
     this.error = '';
     this.auth.login(this.username, this.password).subscribe({
-      next: () => this.router.navigate(['/']),
+      next: (res) => {
+        if (res.must_change_password) {
+          this.router.navigate(['/change-password']);
+          return;
+        }
+        this.router.navigate(['/']);
+      },
       error: () => (this.error = 'Invalid credentials.'),
     });
   }

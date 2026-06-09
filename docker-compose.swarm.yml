@@ -1,0 +1,57 @@
+services:
+  manager:
+    image: ${TRADEBOT_MANAGER_IMAGE:-tradebot-manager:latest}
+    environment:
+      - TRADEBOT_DB_PATH=/app/data/tradebot.db
+      - TRADEBOT_LOG_DIR=/app/logs
+      - TRADEBOT_JWT_SECRET=${JWT_SECRET:-tradebot-dev-secret-change-me}
+      - NEWS_ENGINE_USE_FINBERT=${ENABLE_FINBERT:-0}
+    volumes:
+      - manager-data:/app/data
+      - manager-logs:/app/logs
+    networks:
+      - tradebot-swarm-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.role == manager
+
+  worker:
+    image: ${TRADEBOT_WORKER_IMAGE:-tradebot-worker:latest}
+    environment:
+      - MANAGER_URL=http://manager:8000
+      - MANAGER_WS_URL=ws://manager:8000/ws/worker
+      - WORKER_AGENT_ID={{.Node.Hostname}}-worker
+    networks:
+      - tradebot-swarm-net
+    deploy:
+      mode: replicated
+      replicas: ${WORKER_REPLICAS:-1}
+      restart_policy:
+        condition: on-failure
+
+  ui:
+    image: ${TRADEBOT_UI_IMAGE:-tradebot-ui:latest}
+    ports:
+      - target: 80
+        published: ${UI_PORT:-80}
+        protocol: tcp
+        mode: ingress
+    networks:
+      - tradebot-swarm-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+volumes:
+  manager-data:
+  manager-logs:
+
+networks:
+  tradebot-swarm-net:
+    external: true
+    name: ${SWARM_NETWORK_NAME:-tradebot-swarm-net}

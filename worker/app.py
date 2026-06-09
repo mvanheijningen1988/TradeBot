@@ -28,6 +28,11 @@ class _WorkerForwardLogHandler(logging.Handler):
     """Forward worker process logs to manager diagnostics stream."""
 
     def __init__(self, app: "WorkerApp") -> None:
+        """Create a forwarding handler for worker runtime logs.
+
+        Args:
+            app: Worker application owning manager client lifecycle.
+        """
         super().__init__()
         self._app = app
         self._bot_id_pattern = re.compile(r"\\b[bB]ot\\s+(\\d+)\\b")
@@ -40,7 +45,11 @@ class _WorkerForwardLogHandler(logging.Handler):
         )
 
     def emit(self, record: logging.LogRecord) -> None:
-        """Forward eligible worker log records to the manager websocket."""
+        """Forward eligible log records to manager diagnostics stream.
+
+        Args:
+            record: Python logging record produced by worker runtime.
+        """
         if any(
             record.name.startswith(prefix)
             for prefix in self._excluded_prefixes
@@ -73,6 +82,14 @@ class _WorkerForwardLogHandler(logging.Handler):
         message: str,
         level: str,
     ) -> None:
+        """Forward one prepared log message using worker/bot channels.
+
+        Args:
+            client: Connected manager client.
+            logger_name: Logger namespace for subcategory routing.
+            message: Rendered log message.
+            level: Log level text.
+        """
         match = self._bot_id_pattern.search(message)
         if logger_name.startswith("worker.bot_runner") and match:
             await client.send_bot_log(
@@ -93,6 +110,7 @@ class WorkerApp:
     """Worker Node main application."""
 
     def __init__(self) -> None:
+        """Initialize worker runtime configuration and in-memory state."""
         self.address: str = os.getenv(
             "WORKER_ADDRESS", platform.node()
         )
@@ -114,7 +132,11 @@ class WorkerApp:
         self._forward_log_handler: Optional[logging.Handler] = None
 
     async def start(self) -> None:
-        """Register with manager and start the main loop."""
+        """Start worker lifecycle: register, connect, and process events.
+
+        Returns:
+            ``None``.
+        """
         logging.basicConfig(
             level=os.getenv("WORKER_LOG_LEVEL", "INFO"),
             format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -162,7 +184,7 @@ class WorkerApp:
         )
 
     async def stop(self) -> None:
-        """Stop all bots and disconnect."""
+        """Stop all running bot tasks and disconnect from manager."""
         self._running = False
         for bot_id, runner in self._runners.items():
             await runner.stop(report_stopped=False, cancel_strategy=False)
@@ -175,7 +197,7 @@ class WorkerApp:
         logger.info("Worker %s stopped.", self.agent_id)
 
     async def _heartbeat_loop(self) -> None:
-        """Send periodic heartbeats to the manager."""
+        """Send periodic heartbeat events while worker is active."""
         try:
             while self._running:
                 await self._client.send_heartbeat()
@@ -186,7 +208,7 @@ class WorkerApp:
             logger.exception("Heartbeat loop error.")
 
     async def _receive_loop(self) -> None:
-        """Receive and handle messages from the manager."""
+        """Receive manager websocket messages and dispatch handlers."""
         try:
             while self._running:
                 msg = await self._client.receive()
@@ -207,7 +229,11 @@ class WorkerApp:
             logger.exception("Receive loop error.")
 
     async def _handle_message(self, msg: dict) -> None:
-        """Route an incoming manager message."""
+        """Route one manager message based on websocket type.
+
+        Args:
+            msg: Parsed websocket payload from manager.
+        """
         msg_type = msg.get("type")
 
         if msg_type in (WS_TYPE_START_BOT, WS_TYPE_ASSIGN):
@@ -230,7 +256,12 @@ class WorkerApp:
             )
 
     async def _start_bot(self, bot_id: int, config: dict) -> None:
-        """Start a bot runner for the given bot."""
+        """Create and run a bot runner for one bot assignment.
+
+        Args:
+            bot_id: Bot identifier.
+            config: Bot runtime configuration payload.
+        """
         if bot_id in self._runners:
             logger.warning("Bot %d already running.", bot_id)
             return
@@ -253,7 +284,11 @@ class WorkerApp:
         )
 
     async def _stop_bot(self, bot_id: int) -> None:
-        """Stop a running bot."""
+        """Stop and remove one running bot runner.
+
+        Args:
+            bot_id: Bot identifier.
+        """
         runner = self._runners.pop(bot_id, None)
         if runner:
             await runner.stop()

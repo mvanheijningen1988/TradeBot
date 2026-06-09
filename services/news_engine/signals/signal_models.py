@@ -39,6 +39,8 @@ class Article(BaseModel):
     title: str
     url: str
     source: str
+    source_type: str = "rss"
+    source_weight: float = 1.0
     timestamp: datetime
     summary: str = ""
     content: str = ""
@@ -52,6 +54,8 @@ class ParsedArticle(BaseModel):
     title: str
     url: str
     source: str
+    source_type: str = "rss"
+    source_weight: float = 1.0
     timestamp: datetime
 
 
@@ -104,3 +108,31 @@ class NewsSignal(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class NewsArticle(BaseModel):
+    """Persisted article-level news item for the news feed page."""
+
+    title: str
+    url: str
+    source: str
+    source_type: str = "rss"
+    source_weight: float = 1.0
+    timestamp: datetime
+    summary: str = ""
+    content: str = ""
+    sentiment_label: SentimentLabel
+    sentiment_score: float = Field(ge=-1.0, le=1.0)
+    coins: list[str] = Field(default_factory=list)
+
+
+class NewsOverview(BaseModel):
+    """Aggregated sentiment overview for the crypto news feed."""
+
+    overall_score: float
+    label: str
+    positive_day: bool
+    article_count: int
+    positive_count: int
+    negative_count: int
+    neutral_count: int
