@@ -108,6 +108,16 @@ Ensure that all feature modules are lazy-loaded to improve the app’s performan
 6. Component Organization: 
 Each feature module may have several components, services, and even submodules (e.g., admin-dashboard, user-settings). This granular organization prevents any one module from becoming too large and unwieldy.
 
+### File Rules
+- Split components into separate files (e.g., `component.ts`, `component.html`, `component.scss`)
+- If a component exists of multiple reusable parts, split it into multiple components (e.g., `user-profile.component.ts` and `user-profile-card.component.ts`)
+- Keep services focused on a single responsibility
+- Services should be in their own files and organized by feature
+- Use index.ts files for barrel exports in shared and core modules
+- Keep files focused and avoid large monolithic files
+- Use consistent naming conventions (e.g., `user-profile.component.ts`, `auth.service.ts`)
+- Avoid circular dependencies between modules and services
+
 ### Async/Await & Error Handling
 
 - No missing `await` on async calls

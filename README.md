@@ -120,12 +120,17 @@ This repository now includes two CI/CD workflows:
 
 - `.github/workflows/docker-release-main.yml`
     - Trigger: Push to `main` (and manual dispatch).
-    - Computes/increments semantic version tag (`vMAJOR.MINOR.PATCH`).
-    - Builds and pushes Docker images to Docker Hub with tags:
+    - Detects which components changed (`manager`, `worker`, `ui`).
+    - Builds/pushes only changed components to Docker Hub.
+    - Computes/increments semantic version tags per component:
+        - `manager-vMAJOR.MINOR.PATCH`
+        - `worker-vMAJOR.MINOR.PATCH`
+        - `ui-vMAJOR.MINOR.PATCH`
+    - Publishes image tags per changed component:
         - `MAJOR.MINOR.PATCH`
         - `MAJOR.MINOR`
         - `MAJOR`
-        - `latest` (always points to newest main build)
+        - `latest` (latest for that component image)
 
 ### Required setup in GitHub
 
