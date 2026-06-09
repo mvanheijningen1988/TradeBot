@@ -212,6 +212,8 @@ class BotRunner:
         market = self.config.get("market", "")
         operator_id = self.config.get("operator_id", 0)
         budget_quote = self.config.get("budget_quote", 0.0)
+        profit_mode = self.config.get("profit_mode", "withdraw")
+        profit_skim_pct = self.config.get("profit_skim_pct", 0.0)
         extra = self.config.get("strategy_params", {})
 
         # Build exchange client.
@@ -233,6 +235,8 @@ class BotRunner:
             "market": market,
             "operator_id": operator_id,
             "budget_quote": budget_quote,
+            "profit_mode": profit_mode,
+            "profit_skim_pct": profit_skim_pct,
         }
         if extra and isinstance(extra, dict):
             config_fields.update(extra)

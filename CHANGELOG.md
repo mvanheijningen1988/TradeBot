@@ -2,18 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.2.7] - 2026-06-09
 
 ### Added
 - Default admin login now starts with `admin / admin123!` and the first login forces a password change before the app is accessible.
 - New swarm deployment file `docker-compose.swarm.yml` with overlay-network based service communication and externally published UI port.
 - New PR-gated CI workflow (`.github/workflows/pr-gated-ci.yml`) that runs backend tests, UI production build, and Docker image build checks for pull requests to `main`.
-- New main-branch Docker release workflow (`.github/workflows/docker-release-main.yml`) that creates semantic version tags and publishes `manager`, `worker`, and `ui` images to Docker Hub with semantic tags plus `latest`.
+- New main-branch Docker release workflow (`.github/workflows/docker-release-main.yml`) that creates component-specific semantic tags (`manager-v*`, `worker-v*`, `ui-v*`) and publishes only changed component images to Docker Hub.
 
 ### Changed
 - README now documents both deployment scenarios explicitly: local `docker compose up -d --build` and swarm `docker stack deploy` flow including overlay network creation.
+- README now documents component-scoped Docker release validation steps (manager-only, worker-only, ui-only, shared changes).
 
 ### Fixed
+- Grid strategy now applies `profit_mode` during runtime sizing: `compound` reinvests realized PnL, `skim` reinvests only the non-skimmed profit portion (while losses still reduce sizing), and `withdraw` keeps fixed base sizing.
+- Existing open grid BUY orders are now updated to the current target amount when dynamic sizing changes, so both new and already-open orders follow compound/skim sizing.
 - Fixed Bitvavo order placement rejections (`error 205`) by sending
   UUID-shaped `clientOrderId` values instead of bot-prefixed custom
   identifiers, while preserving bot scoping via persisted exchange
@@ -42,6 +45,14 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - Added server-side grid-level resolution for dashboard modal to prevent manual/non-grid orders from appearing as bot-active levels.
+
+## [UI 0.1.4] - 2026-06-09
+
+### Changed
+- Refactored `SignalTooltipComponent` to use external template and stylesheet files (`signal-tooltip.component.html` and `signal-tooltip.component.scss`) instead of inline component metadata styles/template.
+
+### Fixed
+- Enforced component-structure consistency by removing remaining inline HTML/CSS in the UI component tree (scan-confirmed for `ui/src/app`).
 
 ## [UI 0.1.2] - 2026-06-08
 
