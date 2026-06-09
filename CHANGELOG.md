@@ -8,10 +8,11 @@ All notable changes to this project will be documented in this file.
 - Default admin login now starts with `admin / admin123!` and the first login forces a password change before the app is accessible.
 - New swarm deployment file `docker-compose.swarm.yml` with overlay-network based service communication and externally published UI port.
 - New PR-gated CI workflow (`.github/workflows/pr-gated-ci.yml`) that runs backend tests, UI production build, and Docker image build checks for pull requests to `main`.
-- New main-branch Docker release workflow (`.github/workflows/docker-release-main.yml`) that creates component-specific semantic tags (`manager-v*`, `worker-v*`, `ui-v*`) and publishes only changed component images to Docker Hub with semantic tags plus `latest`.
+- New main-branch Docker release workflow (`.github/workflows/docker-release-main.yml`) that creates component-specific semantic tags (`manager-v*`, `worker-v*`, `ui-v*`) and publishes only changed component images to Docker Hub.
 
 ### Changed
 - README now documents both deployment scenarios explicitly: local `docker compose up -d --build` and swarm `docker stack deploy` flow including overlay network creation.
+- README now documents component-scoped Docker release validation steps (manager-only, worker-only, ui-only, shared changes).
 
 ### Fixed
 - Grid strategy now applies `profit_mode` during runtime sizing: `compound` reinvests realized PnL, `skim` reinvests only the non-skimmed profit portion (while losses still reduce sizing), and `withdraw` keeps fixed base sizing.

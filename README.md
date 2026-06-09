@@ -121,7 +121,7 @@ This repository now includes two CI/CD workflows:
 - `.github/workflows/docker-release-main.yml`
     - Trigger: Push to `main` (and manual dispatch).
     - Detects which components changed (`manager`, `worker`, `ui`).
-    - Builds/pushes only changed components to Docker Hub.
+    - Builds and pushes only changed components to Docker Hub.
     - Computes/increments semantic version tags per component:
         - `manager-vMAJOR.MINOR.PATCH`
         - `worker-vMAJOR.MINOR.PATCH`
@@ -131,6 +131,38 @@ This repository now includes two CI/CD workflows:
         - `MAJOR.MINOR`
         - `MAJOR`
         - `latest` (latest for that component image)
+
+### Release Validation Runbook
+
+Use the checks below after a merge to verify component-scoped releases.
+
+1. Manager-only change
+    - Change only files under `manager/**` (or manager shared dependencies).
+    - Expect workflow to publish only `tradebot-manager` tags.
+    - Expect new git tag: `manager-vX.Y.Z`.
+2. Worker-only change
+    - Change only files under `worker/**` (or worker shared dependencies).
+    - Expect workflow to publish only `tradebot-worker` tags.
+    - Expect new git tag: `worker-vX.Y.Z`.
+3. UI-only change
+    - Change only files under `ui/**`.
+    - Expect workflow to publish only `tradebot-ui` tags.
+    - Expect new git tag: `ui-vX.Y.Z`.
+4. Shared backend change
+    - Change `shared/**` or `pyproject.toml`.
+    - Expect both manager and worker releases.
+    - Expect new tags for both components.
+5. No component-impacting change
+    - Change docs-only files outside release filters.
+    - Expect no Docker release job execution and no new component tag.
+
+Quick verification commands:
+
+```bash
+git tag -l 'manager-v*' | sort -V | tail -n 3
+git tag -l 'worker-v*' | sort -V | tail -n 3
+git tag -l 'ui-v*' | sort -V | tail -n 3
+```
 
 ### Required setup in GitHub
 
