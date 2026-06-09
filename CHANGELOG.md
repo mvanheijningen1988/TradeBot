@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- New development release workflow `.github/workflows/docker-release-development.yml` to publish only changed component images from `development` using prerelease tags (`*-dev`).
+
+### Changed
+- Branch strategy is now development-based: feature branches are created from `development`, validated there first, and promoted to `main` via squash merge.
+- PR gated CI (`.github/workflows/pr-gated-ci.yml`) now runs on pull requests targeting `development` instead of `main`.
+- README and developer instructions now document the development-to-main promotion flow, Docker tag policy for dev/prod, and branch protection expectations.
+
 ## [0.2.7] - 2026-06-09
 
 ### Added

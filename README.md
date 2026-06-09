@@ -112,11 +112,25 @@ pytest tests/ -v
 This repository now includes two CI/CD workflows:
 
 - `.github/workflows/pr-gated-ci.yml`
-    - Trigger: Pull requests to `main`.
+    - Trigger: Pull requests to `development`.
     - Runs:
         - Backend tests (`pytest tests/ -v`)
         - UI production build (`npm run build -- --configuration production`)
         - Docker build checks for `manager`, `worker`, and `ui` images.
+
+- `.github/workflows/docker-release-development.yml`
+    - Trigger: Push to `development` (and manual dispatch).
+    - Detects which components changed (`manager`, `worker`, `ui`).
+    - Builds and pushes only changed components to Docker Hub.
+    - Computes/increments semantic prerelease tags per component:
+        - `manager-vMAJOR.MINOR.PATCH-dev`
+        - `worker-vMAJOR.MINOR.PATCH-dev`
+        - `ui-vMAJOR.MINOR.PATCH-dev`
+    - Publishes image tags per changed component:
+        - `MAJOR.MINOR.PATCH-dev`
+        - `MAJOR.MINOR-dev`
+        - `MAJOR-dev`
+        - `dev`
 
 - `.github/workflows/docker-release-main.yml`
     - Trigger: Push to `main` (and manual dispatch).
@@ -131,6 +145,15 @@ This repository now includes two CI/CD workflows:
         - `MAJOR.MINOR`
         - `MAJOR`
         - `latest` (latest for that component image)
+
+    ## Branching Strategy
+
+    - Create `development` from `main`.
+    - Create feature branches from `development`.
+    - Merge feature branches into `development` after review.
+    - Every merge to `development` can publish `-dev` Docker images for swarm testing.
+    - Merge `development` into `main` using **Squash and merge**.
+    - After merge to `main`, production semantic tags/images are published.
 
 ### Release Validation Runbook
 
@@ -159,6 +182,9 @@ Use the checks below after a merge to verify component-scoped releases.
 Quick verification commands:
 
 ```bash
+git tag -l 'manager-v*-dev' | sort -V | tail -n 3
+git tag -l 'worker-v*-dev' | sort -V | tail -n 3
+git tag -l 'ui-v*-dev' | sort -V | tail -n 3
 git tag -l 'manager-v*' | sort -V | tail -n 3
 git tag -l 'worker-v*' | sort -V | tail -n 3
 git tag -l 'ui-v*' | sort -V | tail -n 3
@@ -169,11 +195,14 @@ git tag -l 'ui-v*' | sort -V | tail -n 3
 1. Add Docker Hub repository secrets:
      - `DOCKERHUB_USERNAME`
      - `DOCKERHUB_TOKEN`
-2. Protect `main` branch and require these status checks before merge:
+2. Protect `development` branch and require these status checks before merge:
      - `backend-tests`
      - `ui-build`
      - `docker-build-check`
-3. Enable "Require a pull request before merging" for `main`.
+3. Protect `main` branch with:
+    - "Require a pull request before merging"
+    - "Require linear history" (recommended)
+    - Merge method policy: allow only **Squash merge** for `development -> main`.
 
 Without branch protection rules, workflows run but cannot block direct merges.
 
