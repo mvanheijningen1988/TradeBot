@@ -15,6 +15,8 @@ Use a development-based flow:
 
 Follow the code style guidelines outlined in the project documentation, and ensure that your code is well-documented. Use meaningful commit messages that describe the changes you have made. When your changes are ready, create a pull request and request a review from the maintainers.
 
+Commit messages must accurately reflect the actual changes in the commit. Avoid vague messages; include the functional area and the concrete change.
+
 Update the version number. Manager, UI and Workers should have isolated version numbers that are updated independently based on changes to each component. Update the CHANGELOG.md file with a summary of your changes, following the format used in previous entries. Include any relevant details about the changes, such as new features, bug fixes, or breaking changes. This will help maintain a clear history of the project's development and make it easier for users to understand what has changed in each release.
 
 2. Testing
@@ -30,3 +32,5 @@ For local validation, run docker compose build to build the updated images for t
 4. Documentation
 
 Update the CHANGELOG.md file with a summary of your changes, following the format used in previous entries. Include any relevant details about the changes, such as new features, bug fixes, or breaking changes. This will help maintain a clear history of the project's development and make it easier for users to understand what has changed in each release.
+
+When changes affect behavior, configuration, setup, APIs, or workflows, also update README.md accordingly. Before opening a pull request, verify that both CHANGELOG.md and README.md were reviewed and updated where applicable.

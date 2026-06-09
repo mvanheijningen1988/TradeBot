@@ -6,11 +6,18 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - New development release workflow `.github/workflows/docker-release-development.yml` to publish only changed component images from `development` using prerelease tags (`*-dev`).
+- New Copilot prompt files under `.github/prompts/` for development branch workflow automation:
+  - `create-feature-branch.prompt.md` for creating `feature/*` branches from `development`.
+  - `create-pr-to-development.prompt.md` for creating PRs to `development` with required validation checks.
+  - `pre-pr-quality-check.prompt.md` for commit quality, test, and documentation readiness checks.
 
 ### Changed
 - Branch strategy is now development-based: feature branches are created from `development`, validated there first, and promoted to `main` via squash merge.
 - PR gated CI (`.github/workflows/pr-gated-ci.yml`) now runs on pull requests targeting `development` instead of `main`.
 - README and developer instructions now document the development-to-main promotion flow, Docker tag policy for dev/prod, and branch protection expectations.
+- Developer instructions now explicitly require commit messages to reflect actual code changes and require verification of `README.md` and `CHANGELOG.md` updates before opening a PR.
+- The PR prompt `.github/prompts/create-pr-to-development.prompt.md` now enforces Conventional Commit validation based on `.github/commit-conventions.md` and requires corrected message suggestions when violations are found.
+- The PR prompt `.github/prompts/create-pr-to-development.prompt.md` no longer requires a user-provided PR summary; the agent must generate the summary from commit and diff context.
 
 ## [0.2.7] - 2026-06-09
 

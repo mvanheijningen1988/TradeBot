@@ -206,6 +206,22 @@ git tag -l 'ui-v*' | sort -V | tail -n 3
 
 Without branch protection rules, workflows run but cannot block direct merges.
 
+## Copilot Prompt Files
+
+Reusable prompt files are available under `.github/prompts/` to streamline the development branch workflow:
+
+- `create-feature-branch.prompt.md`
+    - Creates a new `feature/<name>` branch from `development`.
+    - Includes safety checks (non-destructive git usage, existing branch handling).
+
+- `pre-pr-quality-check.prompt.md`
+    - Runs a pre-PR quality gate for commit message quality, relevant tests, and documentation readiness.
+    - Verifies whether `CHANGELOG.md` and `README.md` were updated where applicable.
+
+- `create-pr-to-development.prompt.md`
+    - Guides PR creation from feature branch to `development` only.
+    - Enforces checks for branch target, commit message quality, tests, and required documentation updates.
+
 ## Docker Deploy Modes
 
 ### Local development (unchanged)
