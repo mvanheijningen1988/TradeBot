@@ -2,7 +2,7 @@ name: PR Gated CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [development]
     types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
