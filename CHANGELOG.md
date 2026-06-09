@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- New manual release workflow `.github/workflows/manual-docker-release.yml` to trigger development or main releases on-demand via GitHub Actions UI with input validation.
 - New development release workflow `.github/workflows/docker-release-development.yml` to publish only changed component images from `development` using prerelease tags (`*-dev`).
 - New Copilot prompt files under `.github/prompts/` for development branch workflow automation:
   - `create-feature-branch.prompt.md` for creating `feature/*` branches from `development`.
@@ -16,6 +17,7 @@ All notable changes to this project will be documented in this file.
 - PR gated CI (`.github/workflows/pr-gated-ci.yml`) now runs on pull requests targeting `development` instead of `main`.
 - README and developer instructions now document the development-to-main promotion flow, Docker tag policy for dev/prod, and branch protection expectations.
 - Developer instructions now explicitly require commit messages to reflect actual code changes and require verification of `README.md` and `CHANGELOG.md` updates before opening a PR.
+- Docker release workflows (both main and development) now detect changes in `.github/prompts/`, `.github/instructions/`, `CHANGELOG.md`, and `README.md` files in addition to component-specific paths, ensuring documentation and workflow updates trigger releases.
 - The PR prompt `.github/prompts/create-pr-to-development.prompt.md` now enforces Conventional Commit validation based on `.github/commit-conventions.md` and requires corrected message suggestions when violations are found.
 - The PR prompt `.github/prompts/create-pr-to-development.prompt.md` no longer requires a user-provided PR summary; the agent must generate the summary from commit and diff context.
 
