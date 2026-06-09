@@ -14,6 +14,8 @@ All notable changes to this project will be documented in this file.
 - README now documents both deployment scenarios explicitly: local `docker compose up -d --build` and swarm `docker stack deploy` flow including overlay network creation.
 
 ### Fixed
+- Grid strategy now applies `profit_mode` during runtime sizing: `compound` reinvests realized PnL, `skim` reinvests only the non-skimmed profit portion (while losses still reduce sizing), and `withdraw` keeps fixed base sizing.
+- Existing open grid BUY orders are now updated to the current target amount when dynamic sizing changes, so both new and already-open orders follow compound/skim sizing.
 - Fixed Bitvavo order placement rejections (`error 205`) by sending
   UUID-shaped `clientOrderId` values instead of bot-prefixed custom
   identifiers, while preserving bot scoping via persisted exchange

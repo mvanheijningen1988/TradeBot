@@ -67,6 +67,10 @@ class GridStrategy(Strategy):
         self._tick_count: int = 0
         self._quote_balance: Decimal = Decimal(str(config.budget_quote))
         self._base_balance: Decimal = Decimal("0")
+        self._initial_budget_quote: Decimal = Decimal(
+            str(config.budget_quote)
+        )
+        self._sell_cost_basis: dict[str, Decimal] = {}
 
     @staticmethod
     def name() -> str:
@@ -100,17 +104,61 @@ class GridStrategy(Strategy):
         items.extend(self._sell_orders.items())
         return items
 
+    def _effective_grid_budget(self) -> Decimal:
+        """Return budget used for buy sizing based on profit mode."""
+        mode = (self._config.profit_mode or "withdraw").lower()
+        total_profit = self._total_profit
+
+        if mode == "compound":
+            budget = self._initial_budget_quote + total_profit
+            return max(budget, Decimal("0"))
+
+        if mode == "skim":
+            skim_factor = Decimal("1") - (
+                Decimal(str(self._config.profit_skim_pct))
+                / Decimal("100")
+            )
+            skim_factor = min(Decimal("1"), max(Decimal("0"), skim_factor))
+            if total_profit > 0:
+                reinvested = total_profit * skim_factor
+            else:
+                reinvested = total_profit
+            budget = self._initial_budget_quote + reinvested
+            return max(budget, Decimal("0"))
+
+        return self._initial_budget_quote
+
+    def _investment_per_grid(self) -> Decimal:
+        """Return quote allocation per grid for current profit mode."""
+        if self._config.num_grids <= 0:
+            return Decimal("0")
+        return self._effective_grid_budget() / Decimal(
+            str(self._config.num_grids)
+        )
+
+    @staticmethod
+    def _target_buy_amount(
+        investment_per_grid: Decimal,
+        buy_price: Decimal,
+    ) -> Decimal:
+        """Return target buy size for one grid level."""
+        if buy_price <= 0:
+            return Decimal("0")
+        return (investment_per_grid / buy_price).quantize(
+            Decimal("0.00000001"), rounding=ROUND_DOWN,
+        )
+
     async def _place_order(
         self,
         cfg: GridConfig,
         side: OrderSide,
         price: Decimal,
         amount: Decimal,
-    ) -> bool:
+    ) -> Optional[str]:
         """Place a single limit order and track it.
 
         Returns:
-            True if placement succeeded.
+            Exchange order id when placement succeeds, else ``None``.
         """
         try:
             client_order_id = self._next_client_order_id(
@@ -144,12 +192,12 @@ class GridStrategy(Strategy):
                 "Placed %s %s @ %s (id=%s)",
                 side.value, amount, price, order.order_id,
             )
-            return True
+            return order.order_id
         except Exception as exc:
             err = f"Failed to place {side.value.upper()} @ {price}: {exc}"
             logger.exception(err)
             await self._log(err, "ERROR")
-            return False
+            return None
 
     # ── lifecycle ────────────────────────────────────────────────
 
@@ -188,8 +236,7 @@ class GridStrategy(Strategy):
         ticker = await self._exchange.get_ticker_price(cfg.market)
         current_price = Decimal(ticker.price)
 
-        budget = Decimal(str(cfg.budget_quote))
-        investment_per_grid = budget / num
+        investment_per_grid = self._investment_per_grid()
 
         self._state = StrategyState.RUNNING
         await self._report_budget(
@@ -224,9 +271,7 @@ class GridStrategy(Strategy):
                 continue
             if self._buy_blocked_by_sell_above(price):
                 continue
-            amount = (investment_per_grid / price).quantize(
-                Decimal("0.00000001"), rounding=ROUND_DOWN,
-            )
+            amount = self._target_buy_amount(investment_per_grid, price)
             if amount <= 0:
                 continue
             if await self._place_order(cfg, OrderSide.BUY, price, amount):
@@ -275,6 +320,7 @@ class GridStrategy(Strategy):
                 )
         self._buy_orders.clear()
         self._sell_orders.clear()
+        self._sell_cost_basis.clear()
         msg = f"Grid stopped, cancelled {cancelled} orders."
         logger.info(msg)
         await self._log(msg)
@@ -299,11 +345,17 @@ class GridStrategy(Strategy):
         # Reconcile tracked orders with the exchange every tick so
         # filled/cancelled levels are replenished quickly.
         self._tick_count += 1
-        await self._reconcile_orders()
+        open_orders = await self._reconcile_orders()
 
         cfg = self._config
-        budget = Decimal(str(cfg.budget_quote))
-        investment_per_grid = budget / cfg.num_grids
+        investment_per_grid = self._investment_per_grid()
+
+        if open_orders:
+            await self._update_open_buy_orders(
+                open_orders=open_orders,
+                investment_per_grid=investment_per_grid,
+                current_price=current_price,
+            )
 
         for grid_price in self._grid_prices[:-1]:     # buy levels 0 … N-1
             if grid_price >= current_price:
@@ -313,9 +365,7 @@ class GridStrategy(Strategy):
                 continue
             if self._buy_blocked_by_sell_above(grid_price):
                 continue
-            amount = (investment_per_grid / grid_price).quantize(
-                Decimal("0.00000001"), rounding=ROUND_DOWN,
-            )
+            amount = self._target_buy_amount(investment_per_grid, grid_price)
             if amount <= 0:
                 continue
             if await self._place_order(cfg, OrderSide.BUY, grid_price, amount):
@@ -323,7 +373,7 @@ class GridStrategy(Strategy):
                     f"Price rose above {grid_price} — placed BUY"
                 )
 
-    async def _reconcile_orders(self) -> None:
+    async def _reconcile_orders(self) -> list[Order]:
         """Detect fills/cancellations by comparing tracked and open orders.
 
         For each tracked order no longer in the exchange's open list,
@@ -339,7 +389,7 @@ class GridStrategy(Strategy):
             )
         except Exception as exc:
             logger.warning("Reconcile: failed to fetch open orders: %s", exc)
-            return
+            return []
 
         # Build set of currently open order IDs.
         #
@@ -353,7 +403,7 @@ class GridStrategy(Strategy):
         missing = self._collect_missing_orders(open_ids)
 
         if not missing:
-            return
+            return open_orders
 
         for side, price_str, order_id in missing:
             status = await self._fetch_order_status(order_id)
@@ -364,6 +414,104 @@ class GridStrategy(Strategy):
                 price_str=price_str,
                 order_id=order_id,
                 status=status,
+            )
+
+        return open_orders
+
+    async def _update_open_buy_orders(
+        self,
+        open_orders: list[Order],
+        investment_per_grid: Decimal,
+        current_price: Decimal,
+    ) -> None:
+        """Resize tracked open BUY orders when compound/skim budget changes."""
+        cfg = self._config
+        if investment_per_grid <= 0:
+            return
+
+        tracked_buy_ids = set(self._buy_orders.values())
+        min_delta = Decimal("0.00000001")
+
+        for order in open_orders:
+            if not self._is_updatable_buy_order(
+                order=order,
+                tracked_buy_ids=tracked_buy_ids,
+                operator_id=cfg.operator_id,
+                current_price=current_price,
+            ):
+                continue
+            buy_price = Decimal(order.price)
+            target_amount = self._target_buy_amount(
+                investment_per_grid=investment_per_grid,
+                buy_price=buy_price,
+            )
+            current_amount = self._order_amount(order)
+            if target_amount <= 0 or current_amount <= 0:
+                continue
+            if abs(target_amount - current_amount) < min_delta:
+                continue
+
+            await self._update_buy_order_amount(
+                order=order,
+                buy_price=buy_price,
+                target_amount=target_amount,
+                current_amount=current_amount,
+            )
+
+    @staticmethod
+    def _order_amount(order: Order) -> Decimal:
+        """Return remaining amount for an open order."""
+        return Decimal(order.amount_remaining or order.amount or "0")
+
+    @staticmethod
+    def _is_updatable_buy_order(
+        order: Order,
+        tracked_buy_ids: set[str],
+        operator_id: int,
+        current_price: Decimal,
+    ) -> bool:
+        """Return True when an open order can be resized."""
+        if order.order_id not in tracked_buy_ids:
+            return False
+        if order.operator_id is None or order.operator_id != operator_id:
+            return False
+        if order.price is None:
+            return False
+        side_val = (
+            order.side.value
+            if hasattr(order.side, "value")
+            else str(order.side)
+        )
+        if side_val != "buy":
+            return False
+        return Decimal(order.price) < current_price
+
+    async def _update_buy_order_amount(
+        self,
+        order: Order,
+        buy_price: Decimal,
+        target_amount: Decimal,
+        current_amount: Decimal,
+    ) -> None:
+        """Send exchange update for one buy order amount."""
+        cfg = self._config
+        try:
+            await self._exchange.update_order(
+                market=cfg.market,
+                order_id=order.order_id,
+                operator_id=cfg.operator_id,
+                amount=str(target_amount),
+            )
+            await self._log(
+                "Updated BUY order "
+                f"{order.order_id} @ {buy_price}: "
+                f"{current_amount} -> {target_amount}"
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to update BUY order %s: %s",
+                order.order_id,
+                exc,
             )
 
     def _collect_missing_orders(
@@ -443,6 +591,7 @@ class GridStrategy(Strategy):
             self._buy_orders.pop(price_str, None)
         else:
             self._sell_orders.pop(price_str, None)
+            self._sell_cost_basis.pop(order_id, None)
         await self._report_order(
             exchange_order_id=order_id,
             market=self._config.market,
@@ -488,8 +637,7 @@ class GridStrategy(Strategy):
         except ValueError:
             return
 
-        budget = Decimal(str(cfg.budget_quote))
-        investment_per_grid = budget / cfg.num_grids
+        investment_per_grid = self._investment_per_grid()
         filled_order = await self._fetch_order_details(order_id)
 
         if filled_side == "buy":
@@ -572,16 +720,20 @@ class GridStrategy(Strategy):
             self._quote_balance - quote_spent,
         )
         self._base_balance += amount
-
-        grid_profit = (sell_price - filled_price) * amount
-        self._total_profit += grid_profit
         if amount <= 0:
             return
 
-        await self._place_order(cfg, OrderSide.SELL, sell_price, amount)
+        sell_order_id = await self._place_order(
+            cfg,
+            OrderSide.SELL,
+            sell_price,
+            amount,
+        )
+        if sell_order_id:
+            self._sell_cost_basis[sell_order_id] = quote_spent
         await self._log(
             f"Counter SELL placed @ {sell_price} "
-            f"(amount={amount}, expected_profit={grid_profit})"
+            f"(amount={amount})"
         )
 
     async def _handle_sell_fill(
@@ -618,6 +770,13 @@ class GridStrategy(Strategy):
             self._base_balance - base_sold,
         )
 
+        estimated_cost_basis = base_sold * buy_price
+        realized_profit = (
+            quote_received
+            - self._sell_cost_basis.pop(order_id, estimated_cost_basis)
+        )
+        self._total_profit += realized_profit
+
         amount = self._buy_amount_from_fill(
             filled_order=filled_order,
             fallback_quote=quote_received,
@@ -628,7 +787,8 @@ class GridStrategy(Strategy):
 
         await self._place_order(cfg, OrderSide.BUY, buy_price, amount)
         await self._log(
-            f"Counter BUY placed @ {buy_price} (amount={amount})"
+            f"Counter BUY placed @ {buy_price} "
+            f"(amount={amount}, realized_profit={realized_profit})"
         )
 
     def _sell_amount_from_fill(
